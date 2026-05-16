@@ -38433,7 +38433,9 @@ A IA identificará os serviços necessários no banco de dados SINAPI e composi�
             seguranca: { nome: 'Segurança do Trabalho', modulos: ['dashboard', 'epi', 'checklistSeguranca', 'ocorrencias', 'visitantes', 'relatorios'] }
         },
         holeriteVars: { bonusBase: 1000, bonusSegSex: 400, bonusTerQui: 300, bonusLimiteFaltas: 2, bonusMax: 1000 },
-        custosConfig: { fatorEncargosAjudante: 1.8, fatorEncargosMestre: 1.8, despesasAdminPercent: 5, incluirCombustivel: true, incluirManutencoes: true }
+        custosConfig: { fatorEncargosAjudante: 1.8, fatorEncargosMestre: 1.8, despesasAdminPercent: 5, incluirCombustivel: true, incluirManutencoes: true },
+        composicoesProprias: [],
+        assinaturasDigitais: []
     };
 
 
@@ -44799,7 +44801,7 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
         if(view === 'cotacoes') renderCotacoes();
         if(view === 'cronograma-fis-fin') { cffInit(); cffAtualizarSelectObras(); }
         if(view === 'nfe') { initNFeData(); renderNFes(); }
-        if(view === 'relatorios') loadCustosConfig();
+        if(view === 'relatorios' && typeof loadCustosConfig === 'function') loadCustosConfig();
         updateSystem();
         if(window.innerWidth < 768) toggleSidebar(false);
     }
@@ -70626,9 +70628,14 @@ function renderEtapasPadrao() {
     }
     
     // ===== PARÂMETROS DE ORÇAMENTO =====
-    
-    function loadParamsOrcamento() {
+
+    // Renomeado para não sobrescrever loadParamsOrcamento (linha ~65718) que é a
+    // ativa no DOM atual. Esta versão usa IDs (paramIncluirMO, paramBdiAC, ...)
+    // que não existem na view 'parametros' renderizada — fica disponível para
+    // futura tela de "Parâmetros Avançados de Orçamento" caso seja reintroduzida.
+    function loadParamsOrcamentoAvancado() {
         const params = db.paramsOrcamento || { incluirMO: true, incluirMAT: true, incluirEQ: true, incluirBDI: true };
+        if(!document.getElementById('paramIncluirMO')) return;
         document.getElementById('paramIncluirMO').checked = params.incluirMO;
         document.getElementById('paramIncluirMAT').checked = params.incluirMAT;
         document.getElementById('paramIncluirEQ').checked = params.incluirEQ;
@@ -73671,7 +73678,9 @@ function renderEtapasPadrao() {
         return custos;
     }
     
-    function renderCustosObra(obraId) {
+    // Renomeado de renderCustosObra para evitar shadow da função real (linha ~60991)
+    // que renderiza a view 'custosObra'. Esta versão retorna um snippet HTML para embed.
+    function renderCustosObraDetalhado(obraId) {
         const custos = calcularCustosObra(obraId);
         const margemLucro = custos.receita > 0 ? ((custos.lucro / custos.receita) * 100).toFixed(1) : 0;
         const lucroClass = custos.lucro >= 0 ? 'green' : 'red';
@@ -93344,11 +93353,12 @@ Seja realista com os preços atuais do mercado brasileiro (2024/2025).`;
         // Limitar resultados
         globalSearchResults = globalSearchResults.slice(0, 10);
         globalSearchIndex = globalSearchResults.length > 0 ? 0 : -1;
-        
-        renderSearchResults();
+
+        renderGlobalSearchResults();
     }
-    
-    function renderSearchResults() {
+
+    // Renomeado de renderSearchResults para não sobrescrever a busca Ctrl+K (linha ~4279)
+    function renderGlobalSearchResults() {
         if (globalSearchResults.length === 0) {
             document.getElementById('globalSearchResults').innerHTML = `
                 <div class="text-center py-8 text-slate-400">
@@ -94861,17 +94871,19 @@ Seja realista com os preços atuais do mercado brasileiro (2024/2025).`;
                 </div>
                 <div class="flex gap-3 mt-6">
                     <button onclick="this.closest('#modalEditServico').remove()" class="flex-1 bg-slate-200 dark:bg-slate-700 py-3 rounded-xl font-bold dark:text-white">Cancelar</button>
-                    <button onclick="salvarServicoNFSe('${id}')" class="flex-1 bg-blue-500 text-white py-3 rounded-xl font-bold">Salvar</button>
+                    <button onclick="salvarServicoNFSeEdit('${id}')" class="flex-1 bg-blue-500 text-white py-3 rounded-xl font-bold">Salvar</button>
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
     }
     
-    function salvarServicoNFSe(id) {
+    // Renomeado para não sobrescrever a função de criar serviço (linha ~56853).
+    // Esta é a versão de EDIÇÃO; o caller no modal de edição também foi atualizado.
+    function salvarServicoNFSeEdit(id) {
         const servico = (db.servicosNFSe || []).find(s => String(s.id) === String(id));
         if(!servico) return;
-        
+
         servico.codigo = document.getElementById('editServCodigo').value;
         servico.descricao = document.getElementById('editServDescricao').value;
         servico.aliquota = parseFloat(document.getElementById('editServAliquota').value) || 5;
@@ -94914,17 +94926,18 @@ Seja realista com os preços atuais do mercado brasileiro (2024/2025).`;
                 </div>
                 <div class="flex gap-3 mt-6">
                     <button onclick="this.closest('#modalEditTomador').remove()" class="flex-1 bg-slate-200 dark:bg-slate-700 py-3 rounded-xl font-bold dark:text-white">Cancelar</button>
-                    <button onclick="salvarTomadorNFSe('${id}')" class="flex-1 bg-green-500 text-white py-3 rounded-xl font-bold">Salvar</button>
+                    <button onclick="salvarTomadorNFSeEdit('${id}')" class="flex-1 bg-green-500 text-white py-3 rounded-xl font-bold">Salvar</button>
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
     }
     
-    function salvarTomadorNFSe(id) {
+    // Renomeado para não sobrescrever a função de criar tomador (linha ~56881).
+    function salvarTomadorNFSeEdit(id) {
         const tomador = (db.tomadoresNFSe || []).find(t => String(t.id) === String(id));
         if(!tomador) return;
-        
+
         tomador.nome = document.getElementById('editTomNome').value;
         tomador.documento = document.getElementById('editTomDoc').value;
         tomador.email = document.getElementById('editTomEmail').value;
