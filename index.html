@@ -125991,6 +125991,150 @@ END-ISO-10303-21;`;
             };
         }
 
+        // imprimirRDO(rdoId): imprime um RDO específico via printDocument
+        if (typeof window.imprimirRDO !== 'function') {
+            window.imprimirRDO = function(rdoId) {
+                if (typeof printDocument !== 'function') {
+                    if (typeof toast === 'function') toast('Sistema de impressão indisponível', 'error');
+                    return;
+                }
+                const rdo = (db.producao || []).find(r => String(r.id) === String(rdoId));
+                if (!rdo) {
+                    if (typeof toast === 'function') toast('RDO não encontrado', 'error');
+                    return;
+                }
+                const obra = (db.obras || []).find(o => String(o.id) === String(rdo.obraId)) || {};
+                const dataStr = rdo.date ? new Date(rdo.date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : '-';
+                const efetivo = Array.isArray(rdo.efetivo) ? rdo.efetivo : [];
+                const equipamentos = Array.isArray(rdo.equipamentos) ? rdo.equipamentos : [];
+                const atividades = Array.isArray(rdo.atividades) ? rdo.atividades : [];
+
+                const linhasEfetivo = efetivo.length
+                    ? efetivo.map(e => `<tr><td>${e.funcao || e.cargo || '-'}</td><td style="text-align:center">${e.qtd || e.quantidade || 0}</td></tr>`).join('')
+                    : '<tr><td colspan="2" style="text-align:center;color:#888">Sem efetivo registrado</td></tr>';
+
+                const linhasEquip = equipamentos.length
+                    ? equipamentos.map(eq => `<tr><td>${eq.nome || eq.tipo || '-'}</td><td style="text-align:center">${eq.qtd || eq.quantidade || 0}</td><td style="text-align:center">${eq.horas || '-'}</td></tr>`).join('')
+                    : '<tr><td colspan="3" style="text-align:center;color:#888">Sem equipamentos</td></tr>';
+
+                const linhasAtiv = atividades.length
+                    ? atividades.map(a => `<tr><td>${a.descricao || a.atividade || '-'}</td><td>${a.local || '-'}</td><td style="text-align:center">${a.progresso || a.percentual || '-'}</td></tr>`).join('')
+                    : '<tr><td colspan="3" style="text-align:center;color:#888">Sem atividades</td></tr>';
+
+                const cfg = (typeof db !== 'undefined' && db.config) ? db.config : {};
+                const html = `
+                    <div class="doc-page">
+                        <div class="doc-header-simple">
+                            <div style="flex:1">
+                                <h1 style="font-size:18px;margin:0;font-weight:bold">${cfg.companyName || 'Empresa'}</h1>
+                                <p style="margin:0;font-size:11px">CNPJ: ${cfg.cnpj || '-'}</p>
+                            </div>
+                        </div>
+                        <div class="doc-title-box">RDO Nº ${rdo.numero || rdo.id} — ${(obra.name || '').toUpperCase()}</div>
+                        <p style="margin-bottom:12px"><strong>Data:</strong> ${dataStr} &nbsp; | &nbsp; <strong>Cliente:</strong> ${obra.client || '-'}</p>
+                        <p style="margin-bottom:18px"><strong>Endereço:</strong> ${obra.address || '-'}</p>
+
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+                            <div style="background:#f1f5f9;padding:10px;border-radius:6px"><strong>Clima manhã:</strong> ${rdo.climaManha || '-'}</div>
+                            <div style="background:#f1f5f9;padding:10px;border-radius:6px"><strong>Clima tarde:</strong> ${rdo.climaTarde || '-'}</div>
+                            <div style="background:#f1f5f9;padding:10px;border-radius:6px"><strong>Paralisação:</strong> ${rdo.paralisacao || '-'}</div>
+                            <div style="background:#f1f5f9;padding:10px;border-radius:6px"><strong>Tempo parado:</strong> ${rdo.tempoParado || 0} h</div>
+                        </div>
+
+                        <h3 style="margin:18px 0 8px;font-size:13px">Efetivo (Total: ${rdo.totalEfetivo || efetivo.reduce((s,e)=>s+(parseInt(e.qtd||e.quantidade)||0),0)})</h3>
+                        <table><thead><tr><th>Função</th><th>Qtd</th></tr></thead><tbody>${linhasEfetivo}</tbody></table>
+
+                        <h3 style="margin:18px 0 8px;font-size:13px">Equipamentos</h3>
+                        <table><thead><tr><th>Equipamento</th><th>Qtd</th><th>Horas</th></tr></thead><tbody>${linhasEquip}</tbody></table>
+
+                        <h3 style="margin:18px 0 8px;font-size:13px">Atividades</h3>
+                        <table><thead><tr><th>Descrição</th><th>Local</th><th>Progresso</th></tr></thead><tbody>${linhasAtiv}</tbody></table>
+
+                        ${rdo.ocorrencias ? `<div style="margin-top:14px;background:#fef3c7;padding:10px;border-radius:6px"><strong>Ocorrências:</strong> ${rdo.ocorrencias}</div>` : ''}
+                        ${rdo.pendencias ? `<div style="margin-top:8px;background:#fee2e2;padding:10px;border-radius:6px"><strong>Pendências:</strong> ${rdo.pendencias}</div>` : ''}
+                        ${rdo.observacoes ? `<div style="margin-top:8px;background:#f1f5f9;padding:10px;border-radius:6px"><strong>Observações:</strong> ${rdo.observacoes}</div>` : ''}
+
+                        <div style="margin-top:30px;text-align:right;font-size:10px;color:#666">Emitido em ${new Date().toLocaleString('pt-BR')}</div>
+                    </div>`;
+                printDocument(html, 'RDO ' + (rdo.numero || rdo.id) + ' - ' + (obra.name || ''));
+            };
+        }
+
+        // gerarRelatorioObra(obraId): relatório consolidado da obra (KPIs + custos + últimos RDOs)
+        if (typeof window.gerarRelatorioObra !== 'function') {
+            window.gerarRelatorioObra = function(obraId) {
+                if (typeof printDocument !== 'function') {
+                    if (typeof toast === 'function') toast('Sistema de impressão indisponível', 'error');
+                    return;
+                }
+                const obra = (db.obras || []).find(o => String(o.id) === String(obraId));
+                if (!obra) {
+                    if (typeof toast === 'function') toast('Obra não encontrada', 'error');
+                    return;
+                }
+                const rdos = (db.producao || []).filter(r => String(r.obraId) === String(obraId));
+                const medicoes = (db.medicoes || []).filter(m => String(m.obraId) === String(obraId));
+                const finance = (db.finance || []).filter(f => String(f.obraId) === String(obraId));
+                const receitas = finance.filter(f => f.type === 'entrada').reduce((s,f)=>s+(parseFloat(f.value||f.amount)||0),0);
+                const despesas = finance.filter(f => f.type === 'saida').reduce((s,f)=>s+(parseFloat(f.value||f.amount)||0),0);
+                const lucro = receitas - despesas;
+                const margem = receitas > 0 ? (lucro / receitas * 100).toFixed(1) : '0.0';
+                const fmtBR = v => 'R$ ' + (parseFloat(v)||0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                const rdosRecentes = [...rdos].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,10);
+                const linhasRDO = rdosRecentes.length
+                    ? rdosRecentes.map(r => `<tr>
+                        <td>${r.date ? new Date(r.date+'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
+                        <td style="text-align:center">${r.numero || r.id}</td>
+                        <td style="text-align:center">${r.totalEfetivo || 0}</td>
+                        <td>${(r.climaManha || '-') + (r.climaTarde ? ' / ' + r.climaTarde : '')}</td>
+                      </tr>`).join('')
+                    : '<tr><td colspan="4" style="text-align:center;color:#888">Sem RDOs registrados</td></tr>';
+
+                const cfg = (typeof db !== 'undefined' && db.config) ? db.config : {};
+                const html = `
+                    <div class="doc-page">
+                        <div class="doc-header-simple">
+                            <div style="flex:1">
+                                <h1 style="font-size:18px;margin:0;font-weight:bold">${cfg.companyName || 'Empresa'}</h1>
+                                <p style="margin:0;font-size:11px">CNPJ: ${cfg.cnpj || '-'}</p>
+                            </div>
+                        </div>
+                        <div class="doc-title-box">RELATÓRIO DA OBRA — ${(obra.name || '').toUpperCase()}</div>
+
+                        <table style="margin-bottom:18px">
+                            <tr><th style="text-align:left">Cliente</th><td>${obra.client || '-'}</td><th style="text-align:left">Status</th><td>${obra.status || '-'}</td></tr>
+                            <tr><th style="text-align:left">Endereço</th><td colspan="3">${obra.address || '-'}</td></tr>
+                            <tr><th style="text-align:left">Início</th><td>${obra.startDate || '-'}</td><th style="text-align:left">Prazo</th><td>${obra.endDate || obra.deadline || '-'}</td></tr>
+                            <tr><th style="text-align:left">Fase</th><td>${obra.fase || '-'}</td><th style="text-align:left">Valor contrato</th><td>${fmtBR(obra.value || obra.valor || 0)}</td></tr>
+                        </table>
+
+                        <h3 style="margin:14px 0 8px;font-size:13px">Indicadores financeiros</h3>
+                        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px">
+                            <div style="background:#dbeafe;padding:10px;border-radius:6px"><div style="font-size:10px;color:#1e40af;text-transform:uppercase">Receitas</div><div style="font-weight:bold;font-size:14px">${fmtBR(receitas)}</div></div>
+                            <div style="background:#fee2e2;padding:10px;border-radius:6px"><div style="font-size:10px;color:#991b1b;text-transform:uppercase">Despesas</div><div style="font-weight:bold;font-size:14px">${fmtBR(despesas)}</div></div>
+                            <div style="background:${lucro>=0?'#d1fae5':'#fee2e2'};padding:10px;border-radius:6px"><div style="font-size:10px;color:${lucro>=0?'#065f46':'#991b1b'};text-transform:uppercase">Lucro</div><div style="font-weight:bold;font-size:14px">${fmtBR(lucro)}</div></div>
+                            <div style="background:#fef3c7;padding:10px;border-radius:6px"><div style="font-size:10px;color:#92400e;text-transform:uppercase">Margem</div><div style="font-weight:bold;font-size:14px">${margem}%</div></div>
+                        </div>
+
+                        <h3 style="margin:14px 0 8px;font-size:13px">Produção</h3>
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
+                            <div style="background:#f1f5f9;padding:10px;border-radius:6px"><div style="font-size:10px;text-transform:uppercase;color:#475569">RDOs</div><div style="font-weight:bold;font-size:14px">${rdos.length}</div></div>
+                            <div style="background:#f1f5f9;padding:10px;border-radius:6px"><div style="font-size:10px;text-transform:uppercase;color:#475569">Medições</div><div style="font-weight:bold;font-size:14px">${medicoes.length}</div></div>
+                            <div style="background:#f1f5f9;padding:10px;border-radius:6px"><div style="font-size:10px;text-transform:uppercase;color:#475569">Lançamentos financeiros</div><div style="font-weight:bold;font-size:14px">${finance.length}</div></div>
+                        </div>
+
+                        <h3 style="margin:14px 0 8px;font-size:13px">Últimos RDOs</h3>
+                        <table><thead><tr><th>Data</th><th>Nº</th><th>Efetivo</th><th>Clima</th></tr></thead><tbody>${linhasRDO}</tbody></table>
+
+                        ${obra.observacoes ? `<div style="margin-top:14px;background:#f1f5f9;padding:10px;border-radius:6px"><strong>Observações:</strong> ${obra.observacoes}</div>` : ''}
+
+                        <div style="margin-top:30px;text-align:right;font-size:10px;color:#666">Emitido em ${new Date().toLocaleString('pt-BR')}</div>
+                    </div>`;
+                printDocument(html, 'Relatório - ' + obra.name);
+            };
+        }
+
         // ===== Stubs (módulos com UI pronta mas lógica pendente) =====
         stub('ajustarOrcamentoIA',          'Ajuste por IA do orçamento');
         stub('atualizarEfetivoRDO',         'Atualização de efetivo do RDO');
@@ -126005,8 +126149,6 @@ END-ISO-10303-21;`;
         stub('exportHorasExtras',           'Exportação de horas extras');
         stub('exportarComposicaoPDF',       'Exportar composição (PDF)');
         stub('exportarCronogramaExcel',     'Exportar cronograma (Excel)');
-        stub('gerarRelatorioObra',          'Relatório consolidado da obra');
-        stub('imprimirRDO',                 'Impressão de RDO');
         stub('moverItemParam',              'Reordenação de parâmetros');
         stub('openHoraExtraModal',          'Modal de hora extra');
         stub('printRequisicoesPendentes',   'Impressão de requisições pendentes');
