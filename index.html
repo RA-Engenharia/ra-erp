@@ -125911,6 +125911,111 @@ END-ISO-10303-21;`;
     console.log('[V72.49]   - abrirDashboardObra(obraId) - Dashboard da obra');
 
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // V72.51: Resolução de handlers onclick para funções faltantes
+    //   - Implementações reais para toggles/utilitários simples.
+    //   - Stubs com toast "em desenvolvimento" para módulos não finalizados,
+    //     preservando todos os botões/UI já criados (sem crashes).
+    // ═══════════════════════════════════════════════════════════════════════════════
+    (function() {
+        const stub = (name, label) => {
+            if (typeof window[name] === 'function') return;
+            window[name] = function() {
+                console.warn('[V72.51 stub] ' + name + ' ainda não implementada');
+                if (typeof toast === 'function') {
+                    toast((label || name) + ' — em desenvolvimento', 'info');
+                }
+            };
+        };
+
+        // ===== Implementações reais =====
+
+        // closeModal(id): fecha um modal específico (a função closeModals existente
+        // fecha todos). Mantém compatibilidade com handlers que passam id.
+        if (typeof window.closeModal !== 'function') {
+            window.closeModal = function(id) {
+                if (id) {
+                    const m = document.getElementById(id);
+                    if (m) m.classList.add('hidden');
+                }
+                if (typeof closeModals === 'function') closeModals();
+            };
+        }
+
+        // Toggles dos checkboxes "marcar como pago/recebido" das contas
+        if (typeof window.toggleCPPago !== 'function') {
+            window.toggleCPPago = function() {
+                const cb = document.getElementById('cpPago');
+                const dt = document.getElementById('cpDataPagamento');
+                if (!cb || !dt) return;
+                if (cb.checked) {
+                    dt.classList.remove('hidden');
+                    if (!dt.value) dt.value = new Date().toISOString().split('T')[0];
+                } else {
+                    dt.classList.add('hidden');
+                    dt.value = '';
+                }
+            };
+        }
+        if (typeof window.toggleCRRecebido !== 'function') {
+            window.toggleCRRecebido = function() {
+                const cb = document.getElementById('crRecebido');
+                const dt = document.getElementById('crDataRecebimento');
+                if (!cb || !dt) return;
+                if (cb.checked) {
+                    dt.classList.remove('hidden');
+                    if (!dt.value) dt.value = new Date().toISOString().split('T')[0];
+                } else {
+                    dt.classList.add('hidden');
+                    dt.value = '';
+                }
+            };
+        }
+
+        // toggleAIProviderFields: ajusta placeholder/label da chave conforme provedor
+        if (typeof window.toggleAIProviderFields !== 'function') {
+            window.toggleAIProviderFields = function() {
+                const sel = document.getElementById('aiProviderSelect');
+                const key = document.getElementById('aiApiKeyInput');
+                if (!sel || !key) return;
+                key.placeholder = sel.value === 'openai' ? 'sk-...' : 'gsk_...';
+            };
+        }
+
+        // previewLogoConfig: atualiza um preview se existir; senão é no-op
+        if (typeof window.previewLogoConfig !== 'function') {
+            window.previewLogoConfig = function() {
+                const input = document.getElementById('confLogo');
+                const img = document.getElementById('confLogoPreview');
+                if (input && img) img.src = input.value || '';
+            };
+        }
+
+        // ===== Stubs (módulos com UI pronta mas lógica pendente) =====
+        stub('ajustarOrcamentoIA',          'Ajuste por IA do orçamento');
+        stub('atualizarEfetivoRDO',         'Atualização de efetivo do RDO');
+        stub('batchEnviarNotificacao',      'Envio de notificações em lote');
+        stub('batchExportarSelecionados',   'Exportação em lote');
+        stub('batchGerarDocumentos',        'Geração de documentos em lote');
+        stub('bimExportQuantitativesPDF',   'Exportar quantitativos BIM (PDF)');
+        stub('bimFitAll',                   'Enquadrar tudo (BIM)');
+        stub('bimShowSettings',             'Configurações do visualizador BIM');
+        stub('bimToggleWireframe',          'Wireframe BIM');
+        stub('bimUpdateElementMaterial',    'Atualização de material BIM');
+        stub('exportHorasExtras',           'Exportação de horas extras');
+        stub('exportarComposicaoPDF',       'Exportar composição (PDF)');
+        stub('exportarCronogramaExcel',     'Exportar cronograma (Excel)');
+        stub('gerarRelatorioObra',          'Relatório consolidado da obra');
+        stub('imprimirRDO',                 'Impressão de RDO');
+        stub('moverItemParam',              'Reordenação de parâmetros');
+        stub('openHoraExtraModal',          'Modal de hora extra');
+        stub('printRequisicoesPendentes',   'Impressão de requisições pendentes');
+        stub('renderHorasExtras',           'Listagem de horas extras');
+        stub('saveHEConfig',                'Configuração de horas extras');
+
+        console.log('[V72.51] Handlers onclick faltantes resolvidos (helpers + stubs).');
+    })();
+
 
 </script>
 </body>
