@@ -23443,23 +23443,23 @@
                         </button>
                     </div>
                     
-                    <!-- KPIs de Manutenção -->
+                    <!-- KPIs de Manutenção (IDs com sufixo Tab para não colidir com a view 'manutencoes') -->
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div class="glass-panel p-4 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white">
                             <div class="text-xs opacity-80 uppercase">Total Manutenções</div>
-                            <div class="text-2xl font-black mt-1" id="manutTotal">0</div>
+                            <div class="text-2xl font-black mt-1" id="manutTotalTab">0</div>
                         </div>
                         <div class="glass-panel p-4 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white">
                             <div class="text-xs opacity-80 uppercase">Este Mês</div>
-                            <div class="text-2xl font-black mt-1" id="manutMes">0</div>
+                            <div class="text-2xl font-black mt-1" id="manutMesTab">0</div>
                         </div>
                         <div class="glass-panel p-4 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white">
                             <div class="text-xs opacity-80 uppercase">Custo Total</div>
-                            <div class="text-xl font-black mt-1" id="manutCusto">R$ 0</div>
+                            <div class="text-xl font-black mt-1" id="manutCustoTab">R$ 0</div>
                         </div>
                         <div class="glass-panel p-4 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 text-white">
                             <div class="text-xs opacity-80 uppercase">Custo Médio</div>
-                            <div class="text-xl font-black mt-1" id="manutCustoMedio">R$ 0</div>
+                            <div class="text-xl font-black mt-1" id="manutCustoMedioTab">R$ 0</div>
                         </div>
                     </div>
                     
@@ -23478,12 +23478,12 @@
                                         <th class="p-4 text-center">Ações</th>
                                     </tr>
                                 </thead>
-                                <tbody id="manutencoesTable" class="divide-y dark:divide-slate-700"></tbody>
+                                <tbody id="manutencoesTableTab" class="divide-y dark:divide-slate-700"></tbody>
                             </table>
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Tab Documentos -->
                 <div id="tabContentVeiculosDocumentos" class="hidden space-y-6">
                     <!-- Resumo de Documentos -->
@@ -44946,7 +44946,7 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
                 initModalEspelhoPonto();
             }
             if(id === 'modalRDOReport' && typeof initRDOReportModal === 'function') initRDOReportModal();
-            if(id === 'modalNotifications' && typeof renderNotifications === 'function') renderNotifications();
+            if(id === 'modalNotifications' && typeof renderNotificationsModal === 'function') renderNotificationsModal();
         } catch(e) {
             console.warn('Erro em inicialização de modal:', e);
         }
@@ -44976,7 +44976,7 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
             if(id === 'modalPontoEspecial' && typeof renderPontoEspecialEmps === 'function') renderPontoEspecialEmps();
             if(id === 'modalHoraExtra' && typeof renderHoraExtraEmps === 'function') renderHoraExtraEmps();
             if(id === 'modalRDOReport' && typeof initRDOReportModal === 'function') initRDOReportModal();
-            if(id === 'modalNotifications' && typeof renderNotifications === 'function') renderNotifications();
+            if(id === 'modalNotifications' && typeof renderNotificationsModal === 'function') renderNotificationsModal();
         } catch(e) {}
     }
     
@@ -46008,9 +46008,15 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
         return notifs;
     }
     
-    function renderNotifications() {
+    // Renomeada de renderNotifications para não sobrescrever o sistema moderno de
+    // notificações (linha ~7764) que escreve em #notification-list. Esta versão
+    // alimenta o modal #modalNotifications (#notificationsList) com alertas
+    // gerados em runtime por generateNotifications().
+    function renderNotificationsModal() {
+        const target = document.getElementById('notificationsList');
+        if(!target) return;
         const notifs = generateNotifications();
-        document.getElementById('notificationsList').innerHTML = notifs.length > 0 ? notifs.map(n => `
+        target.innerHTML = notifs.length > 0 ? notifs.map(n => `
             <div class="flex items-start gap-3 p-3 rounded-xl ${n.type==='error'?'bg-red-50 dark:bg-red-900/20':'bg-yellow-50 dark:bg-yellow-900/20'}">
                 <div class="w-10 h-10 rounded-xl ${n.type==='error'?'bg-red-500':'bg-yellow-500'} flex items-center justify-center shrink-0">
                     <i class="fas fa-${n.type==='error'?'exclamation-circle':'exclamation-triangle'} text-white"></i>
@@ -46214,7 +46220,7 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
         // Renderizar conteúdo específico
         if(tab === 'lista') renderVeiculos();
         if(tab === 'cards') renderVeiculosCards();
-        if(tab === 'manutencoes') renderManutencoes();
+        if(tab === 'manutencoes') renderManutencoesVeicTab();
         if(tab === 'documentos') renderDocumentosVeiculos();
         if(tab === 'dashboard') renderVeiculosDashboard();
     }
@@ -46426,26 +46432,31 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
         showDynamicModal(`Detalhes: ${v.nome}`, html);
     }
     
-    // Renderizar Manutenções
-    function renderManutencoes() {
+    // Renderizar Manutenções — versão do TAB dentro da view Veículos.
+    // Renomeada (antes era renderManutencoes) para não sobrescrever a versão da
+    // view standalone 'manutencoes' (linha ~48449). IDs também foram migrados
+    // para o sufixo 'Tab' para evitar colisão de getElementById.
+    function renderManutencoesVeicTab() {
         const manutencoes = db.manutencoes || [];
         const mesAtual = getMonth();
         const manutMes = manutencoes.filter(m => (m.data || '').startsWith(mesAtual));
-        
+
         // KPIs
         const custoTotal = manutencoes.reduce((s, m) => s + (parseFloat(m.valor) || 0), 0);
         const custoMedio = manutencoes.length > 0 ? custoTotal / manutencoes.length : 0;
-        
+
         const el = (id, val) => { const e = document.getElementById(id); if(e) e.textContent = val; };
-        el('manutTotal', manutencoes.length);
-        el('manutMes', manutMes.length);
-        el('manutCusto', fmt(custoTotal));
-        el('manutCustoMedio', fmt(custoMedio));
-        
+        el('manutTotalTab', manutencoes.length);
+        el('manutMesTab', manutMes.length);
+        el('manutCustoTab', fmt(custoTotal));
+        el('manutCustoMedioTab', fmt(custoMedio));
+
         // Tabela
         const sorted = [...manutencoes].sort((a, b) => (b.data || '').localeCompare(a.data || ''));
-        
-        document.getElementById('manutencoesTable').innerHTML = sorted.slice(0, 50).map(m => {
+
+        const tableEl = document.getElementById('manutencoesTableTab');
+        if(!tableEl) return;
+        tableEl.innerHTML = sorted.slice(0, 50).map(m => {
             const veic = (db.veiculos || []).find(v => String(v.id) === String(m.veiculoId));
             return `
             <tr class="hover:bg-amber-50 dark:hover:bg-amber-900/20">
@@ -48511,8 +48522,11 @@ console.log('[V72.50] Carregando Orçamento PRO V3...');
                 </div>
             </div>
         `).join('') : '<p class="text-slate-500 text-center py-8"><i class="fas fa-check-circle text-green-500 mr-2"></i>Nenhuma manutenção pendente</p>';
+
+        // Mantém o tab de Veículos > Manutenções em sincronia (idempotente).
+        if(typeof renderManutencoesVeicTab === 'function') renderManutencoesVeicTab();
     }
-    
+
     function saveManutencao() {
         const id = document.getElementById('manutId').value;
         const veiculoId = document.getElementById('manutVeiculo').value;
