@@ -126287,6 +126287,114 @@ END-ISO-10303-21;`;
             };
         }
 
+        // exportarCronogramaExcel(orcamentoId): gera XLSX do cronograma físico-financeiro
+        // usando os parâmetros (prazo, data início, distribuição) do modal aberto.
+        if (typeof window.exportarCronogramaExcel !== 'function') {
+            window.exportarCronogramaExcel = function(orcamentoId) {
+                if (typeof XLSX === 'undefined' || !XLSX.utils) {
+                    if (typeof toast === 'function') toast('Biblioteca XLSX não disponível', 'error');
+                    return;
+                }
+                const orc = (db.orcamentos || []).find(o => String(o.id) === String(orcamentoId));
+                if (!orc) {
+                    if (typeof toast === 'function') toast('Orçamento não encontrado', 'error');
+                    return;
+                }
+
+                const prazo = parseInt(document.getElementById('cronoPrazo')?.value) || 6;
+                const dataInicio = document.getElementById('cronoInicio')?.value || new Date().toISOString().split('T')[0];
+                const distribuicao = document.getElementById('cronoDistribuicao')?.value || 'linear';
+
+                const itens = orc.itens || [];
+                const valorTotal = itens.reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
+
+                // Mesma distribuição usada por recalcularCronograma()
+                const meses = [];
+                let acumulado = 0;
+                for (let i = 0; i < prazo; i++) {
+                    const data = new Date(dataInicio);
+                    data.setMonth(data.getMonth() + i);
+                    let percentual = 0;
+                    switch (distribuicao) {
+                        case 'linear':
+                            percentual = 100 / prazo; break;
+                        case 'curvaS': {
+                            const t = (i + 0.5) / prazo;
+                            percentual = (Math.sin((t - 0.5) * Math.PI) + 1) / 2 * (100 / prazo) * 1.8;
+                            break;
+                        }
+                        case 'frontLoaded':
+                            percentual = (prazo - i) / ((prazo * (prazo + 1)) / 2) * 100; break;
+                        case 'backLoaded':
+                            percentual = (i + 1) / ((prazo * (prazo + 1)) / 2) * 100; break;
+                        default:
+                            percentual = 100 / prazo;
+                    }
+                    const valor = valorTotal * (percentual / 100);
+                    acumulado += valor;
+                    meses.push({
+                        numero: i + 1,
+                        mes: data.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
+                        periodo: data.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+                        percentual,
+                        valor,
+                        acumulado,
+                        percentualAcum: valorTotal > 0 ? (acumulado / valorTotal) * 100 : 0
+                    });
+                }
+
+                const rotulosDistrib = {
+                    linear: 'Linear (uniforme)',
+                    curvaS: 'Curva S (padrão construção)',
+                    frontLoaded: 'Concentrado no início',
+                    backLoaded: 'Concentrado no final'
+                };
+
+                const cfg = (typeof db !== 'undefined' && db.config) ? db.config : {};
+                const dadosExcel = [
+                    ['CRONOGRAMA FÍSICO-FINANCEIRO'],
+                    [cfg.companyName || '', '', '', '', 'CNPJ:', cfg.cnpj || ''],
+                    [],
+                    ['Orçamento:', orc.codigo || orc.id || ''],
+                    ['Cliente:',   orc.cliente || orc.client || '-'],
+                    ['Obra:',      orc.obra || orc.descricao || '-'],
+                    ['Prazo:',     prazo + ' meses', '', '', 'Início:', dataInicio],
+                    ['Distribuição:', rotulosDistrib[distribuicao] || distribuicao],
+                    ['Valor total:',  valorTotal],
+                    [],
+                    ['Mês', 'Período', '% no mês', 'Valor no mês (R$)', '% acumulado', 'Acumulado (R$)']
+                ];
+                meses.forEach(m => {
+                    dadosExcel.push([
+                        m.numero,
+                        m.periodo,
+                        Number(m.percentual.toFixed(2)),
+                        Number(m.valor.toFixed(2)),
+                        Number(m.percentualAcum.toFixed(2)),
+                        Number(m.acumulado.toFixed(2))
+                    ]);
+                });
+                dadosExcel.push([]);
+                dadosExcel.push(['', '', 'TOTAL', Number(valorTotal.toFixed(2)), '100,00%', Number(valorTotal.toFixed(2))]);
+
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.aoa_to_sheet(dadosExcel);
+                ws['!cols'] = [
+                    { wch: 6 },   // Mês
+                    { wch: 22 },  // Período
+                    { wch: 12 },  // % mês
+                    { wch: 18 },  // Valor mês
+                    { wch: 14 },  // % acumulado
+                    { wch: 18 }   // Acumulado
+                ];
+                XLSX.utils.book_append_sheet(wb, ws, 'Cronograma');
+
+                const nomeArquivo = 'Cronograma_' + (orc.codigo || orcamentoId) + '_' + new Date().toISOString().split('T')[0] + '.xlsx';
+                XLSX.writeFile(wb, nomeArquivo);
+                if (typeof toast === 'function') toast('Cronograma exportado para Excel!', 'success');
+            };
+        }
+
         // ===== Stubs (módulos com UI pronta mas lógica pendente) =====
         stub('ajustarOrcamentoIA',          'Ajuste por IA do orçamento');
         stub('atualizarEfetivoRDO',         'Atualização de efetivo do RDO');
@@ -126299,7 +126407,6 @@ END-ISO-10303-21;`;
         stub('bimToggleWireframe',          'Wireframe BIM');
         stub('bimUpdateElementMaterial',    'Atualização de material BIM');
         stub('exportHorasExtras',           'Exportação de horas extras');
-        stub('exportarCronogramaExcel',     'Exportar cronograma (Excel)');
         stub('moverItemParam',              'Reordenação de parâmetros');
         stub('openHoraExtraModal',          'Modal de hora extra');
         stub('renderHorasExtras',           'Listagem de horas extras');
