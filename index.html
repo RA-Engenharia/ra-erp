@@ -126135,6 +126135,158 @@ END-ISO-10303-21;`;
             };
         }
 
+        // printRequisicoesPendentes(): imprime requisições pendentes/aprovadas agrupadas por obra
+        if (typeof window.printRequisicoesPendentes !== 'function') {
+            window.printRequisicoesPendentes = function() {
+                if (typeof printDocument !== 'function') {
+                    if (typeof toast === 'function') toast('Sistema de impressão indisponível', 'error');
+                    return;
+                }
+                const pendentes = (db.requisicoes || []).filter(r => r.status === 'pendente' || r.status === 'aprovada');
+                if (pendentes.length === 0) {
+                    if (typeof toast === 'function') toast('Nenhuma requisição pendente ou aprovada', 'info');
+                    return;
+                }
+                const obras = db.obras || [];
+                const employees = db.employees || [];
+                const obraNome = id => (obras.find(o => String(o.id) === String(id)) || {}).name || '—';
+                const empNome  = id => (employees.find(e => String(e.id) === String(id)) || {}).name || '—';
+                const fmtBR = v => 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const corStatus = s => s === 'aprovada' ? '#059669' : '#d97706';
+
+                const grupos = {};
+                pendentes.forEach(r => {
+                    const k = String(r.obraId || 'sem-obra');
+                    (grupos[k] = grupos[k] || []).push(r);
+                });
+                const totalGeral = pendentes.reduce((sR, r) => sR + (r.itens || []).reduce((sI, i) => sI + (parseFloat(i.valorTotal) || 0), 0), 0);
+
+                const blocos = Object.keys(grupos).map(obraId => {
+                    const reqs = grupos[obraId].sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+                    const totalObra = reqs.reduce((sR, r) => sR + (r.itens || []).reduce((sI, i) => sI + (parseFloat(i.valorTotal) || 0), 0), 0);
+                    const linhasReq = reqs.map(r => {
+                        const itens = r.itens || [];
+                        const totalReq = itens.reduce((s, i) => s + (parseFloat(i.valorTotal) || 0), 0);
+                        const linhasItem = itens.length
+                            ? itens.map(i => `<tr>
+                                    <td>${i.descricao || '-'}</td>
+                                    <td style="text-align:center">${i.quantidade || 0}</td>
+                                    <td style="text-align:center">${i.unidade || '-'}</td>
+                                    <td style="text-align:right">${fmtBR(i.precoUnitario || 0)}</td>
+                                    <td style="text-align:right">${fmtBR(i.valorTotal || 0)}</td>
+                                  </tr>`).join('')
+                            : '<tr><td colspan="5" style="text-align:center;color:#888">Sem itens</td></tr>';
+                        return `
+                            <div style="border:1px solid #ddd;border-radius:6px;margin-bottom:14px;overflow:hidden">
+                                <div style="background:#1e293b;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center">
+                                    <div><strong>Requisição ${r.numero || r.id}</strong> &nbsp;•&nbsp; ${r.data ? new Date(r.data + 'T12:00:00').toLocaleDateString('pt-BR') : '-'} &nbsp;•&nbsp; Solicitante: ${empNome(r.solicitanteId)}</div>
+                                    <div><span style="background:${corStatus(r.status)};color:#fff;padding:3px 10px;border-radius:20px;font-size:10px;text-transform:uppercase">${r.status || '-'}</span> <span style="background:#475569;color:#fff;padding:3px 10px;border-radius:20px;font-size:10px;text-transform:uppercase;margin-left:4px">${r.urgencia || 'normal'}</span></div>
+                                </div>
+                                <table style="margin:0"><thead><tr><th>Item</th><th>Qtd</th><th>Un</th><th>Preço unit.</th><th>Total</th></tr></thead><tbody>${linhasItem}</tbody></table>
+                                <div style="padding:6px 12px;text-align:right;background:#f1f5f9"><strong>Total da requisição: ${fmtBR(totalReq)}</strong></div>
+                                ${r.obs ? `<div style="padding:8px 12px;background:#fef3c7;font-size:11px"><strong>Obs:</strong> ${r.obs}</div>` : ''}
+                            </div>`;
+                    }).join('');
+                    return `
+                        <h3 style="margin:18px 0 10px;font-size:13px;background:#0f172a;color:#fff;padding:8px 12px;border-radius:4px">${obraNome(obraId)} <span style="float:right;font-weight:normal">${reqs.length} requisição(ões) • Total: ${fmtBR(totalObra)}</span></h3>
+                        ${linhasReq}`;
+                }).join('');
+
+                const cfg = (typeof db !== 'undefined' && db.config) ? db.config : {};
+                const html = `
+                    <div class="doc-page">
+                        <div class="doc-header-simple">
+                            <div style="flex:1">
+                                <h1 style="font-size:18px;margin:0;font-weight:bold">${cfg.companyName || 'Empresa'}</h1>
+                                <p style="margin:0;font-size:11px">CNPJ: ${cfg.cnpj || '-'}</p>
+                            </div>
+                        </div>
+                        <div class="doc-title-box">REQUISIÇÕES PENDENTES / APROVADAS</div>
+                        <p style="margin-bottom:14px"><strong>Total de requisições:</strong> ${pendentes.length} &nbsp;•&nbsp; <strong>Valor consolidado:</strong> ${fmtBR(totalGeral)}</p>
+                        ${blocos}
+                        <div style="margin-top:30px;text-align:right;font-size:10px;color:#666">Emitido em ${new Date().toLocaleString('pt-BR')}</div>
+                    </div>`;
+                printDocument(html, 'Requisições Pendentes');
+            };
+        }
+
+        // exportarComposicaoPDF(codigo): imprime detalhamento de uma composição (base global ou próprias)
+        if (typeof window.exportarComposicaoPDF !== 'function') {
+            window.exportarComposicaoPDF = function(codigo) {
+                if (typeof printDocument !== 'function') {
+                    if (typeof toast === 'function') toast('Sistema de impressão indisponível', 'error');
+                    return;
+                }
+                let comp = null;
+                if (typeof composicoesBase !== 'undefined' && composicoesBase && composicoesBase[codigo]) {
+                    comp = composicoesBase[codigo];
+                }
+                if (!comp) {
+                    comp = (db.composicoesProprias || []).find(c => String(c.codigo) === String(codigo) || String(c.id) === String(codigo));
+                }
+                if (!comp) {
+                    if (typeof toast === 'function') toast('Composição não encontrada', 'error');
+                    return;
+                }
+
+                const insumos = Array.isArray(comp.insumos) ? comp.insumos : [];
+                const calc = (typeof calcularCustoComposicao === 'function' && insumos.length)
+                    ? calcularCustoComposicao(comp)
+                    : null;
+                const fmtBR = v => 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const rotuloTipo = t => ({ MO: 'Mão de obra', MAT: 'Material', EQ: 'Equipamento' }[t] || (t || '-'));
+
+                const totalCalculado = (calc && typeof calc.total === 'number')
+                    ? calc.total
+                    : insumos.reduce((s, i) => s + ((parseFloat(i.coeficiente) || 0) * (parseFloat(i.custoUnit || i.custoUnitario) || 0)), 0);
+                const totalExibido = totalCalculado || parseFloat(comp.custoTotal) || 0;
+
+                const linhasIns = insumos.length
+                    ? insumos.map(i => {
+                        const subt = (parseFloat(i.coeficiente) || 0) * (parseFloat(i.custoUnit || i.custoUnitario) || 0);
+                        return `<tr>
+                            <td style="text-align:center">${rotuloTipo(i.tipo)}</td>
+                            <td>${i.descricao || '-'}</td>
+                            <td style="text-align:center">${i.unidade || '-'}</td>
+                            <td style="text-align:right">${(parseFloat(i.coeficiente) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 4 })}</td>
+                            <td style="text-align:right">${fmtBR(i.custoUnit || i.custoUnitario || 0)}</td>
+                            <td style="text-align:right">${fmtBR(subt)}</td>
+                        </tr>`;
+                    }).join('')
+                    : '<tr><td colspan="6" style="text-align:center;color:#888">Sem insumos detalhados</td></tr>';
+
+                const subtotais = calc ? `
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0">
+                        <div style="background:#dbeafe;padding:10px;border-radius:6px"><div style="font-size:10px;color:#1e40af;text-transform:uppercase">Mão de obra</div><div style="font-weight:bold;font-size:14px">${fmtBR(calc.custoMO || 0)}</div></div>
+                        <div style="background:#fef3c7;padding:10px;border-radius:6px"><div style="font-size:10px;color:#92400e;text-transform:uppercase">Materiais</div><div style="font-weight:bold;font-size:14px">${fmtBR(calc.custoMAT || 0)}</div></div>
+                        <div style="background:#ede9fe;padding:10px;border-radius:6px"><div style="font-size:10px;color:#5b21b6;text-transform:uppercase">Equipamentos</div><div style="font-weight:bold;font-size:14px">${fmtBR(calc.custoEQ || 0)}</div></div>
+                    </div>` : '';
+
+                const cfg = (typeof db !== 'undefined' && db.config) ? db.config : {};
+                const html = `
+                    <div class="doc-page">
+                        <div class="doc-header-simple">
+                            <div style="flex:1">
+                                <h1 style="font-size:18px;margin:0;font-weight:bold">${cfg.companyName || 'Empresa'}</h1>
+                                <p style="margin:0;font-size:11px">CNPJ: ${cfg.cnpj || '-'}</p>
+                            </div>
+                        </div>
+                        <div class="doc-title-box">COMPOSIÇÃO ${comp.codigo || codigo}</div>
+                        <p style="margin-bottom:6px"><strong>Descrição:</strong> ${comp.descricao || '-'}</p>
+                        <p style="margin-bottom:14px"><strong>Categoria:</strong> ${comp.categoria || '-'} &nbsp;•&nbsp; <strong>Unidade:</strong> ${comp.unidade || '-'}</p>
+                        ${subtotais}
+                        <h3 style="margin:14px 0 8px;font-size:13px">Insumos</h3>
+                        <table>
+                            <thead><tr><th>Tipo</th><th>Descrição</th><th>Un</th><th>Coef.</th><th>Custo unit.</th><th>Subtotal</th></tr></thead>
+                            <tbody>${linhasIns}</tbody>
+                            <tfoot><tr><th colspan="5" style="text-align:right">Custo total por ${comp.unidade || 'un'}</th><th style="text-align:right">${fmtBR(totalExibido)}</th></tr></tfoot>
+                        </table>
+                        <div style="margin-top:30px;text-align:right;font-size:10px;color:#666">Emitido em ${new Date().toLocaleString('pt-BR')}</div>
+                    </div>`;
+                printDocument(html, 'Composição ' + (comp.codigo || codigo));
+            };
+        }
+
         // ===== Stubs (módulos com UI pronta mas lógica pendente) =====
         stub('ajustarOrcamentoIA',          'Ajuste por IA do orçamento');
         stub('atualizarEfetivoRDO',         'Atualização de efetivo do RDO');
@@ -126147,11 +126299,9 @@ END-ISO-10303-21;`;
         stub('bimToggleWireframe',          'Wireframe BIM');
         stub('bimUpdateElementMaterial',    'Atualização de material BIM');
         stub('exportHorasExtras',           'Exportação de horas extras');
-        stub('exportarComposicaoPDF',       'Exportar composição (PDF)');
         stub('exportarCronogramaExcel',     'Exportar cronograma (Excel)');
         stub('moverItemParam',              'Reordenação de parâmetros');
         stub('openHoraExtraModal',          'Modal de hora extra');
-        stub('printRequisicoesPendentes',   'Impressão de requisições pendentes');
         stub('renderHorasExtras',           'Listagem de horas extras');
         stub('saveHEConfig',                'Configuração de horas extras');
 
