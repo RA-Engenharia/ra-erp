@@ -126592,12 +126592,153 @@ END-ISO-10303-21;`;
             };
         }
 
+        // ═══════════════════════════════════════════════════════════════════════
+        // AÇÕES EM LOTE — view-equipe (selectedEmps é o Set global de IDs)
+        // ═══════════════════════════════════════════════════════════════════════
+
+        // Helper: lista de funcionários selecionados, ou null se nenhum.
+        const _getSelectedEmployees = () => {
+            if (typeof selectedEmps === 'undefined' || !selectedEmps || selectedEmps.size === 0) {
+                if (typeof toast === 'function') toast('Selecione ao menos um colaborador', 'warning');
+                return null;
+            }
+            const todos = (typeof db !== 'undefined' && db.employees) ? db.employees : [];
+            const lista = todos.filter(e => selectedEmps.has(e.id));
+            if (lista.length === 0) {
+                if (typeof toast === 'function') toast('Nenhum colaborador encontrado na seleção', 'warning');
+                return null;
+            }
+            return lista;
+        };
+
+        // batchExportarSelecionados(): exporta os colaboradores selecionados em XLSX
+        if (typeof window.batchExportarSelecionados !== 'function') {
+            window.batchExportarSelecionados = function() {
+                if (typeof XLSX === 'undefined' || !XLSX.utils) {
+                    if (typeof toast === 'function') toast('Biblioteca XLSX não disponível', 'error');
+                    return;
+                }
+                const emps = _getSelectedEmployees();
+                if (!emps) return;
+                const statusLabel = s => s === 'inactive' ? 'Inativo' : s === 'afastado' ? 'Afastado' : s === 'ferias' ? 'Férias' : 'Ativo';
+                const cab = [
+                    ['EXPORTAÇÃO DE COLABORADORES'],
+                    ['Selecionados:', emps.length],
+                    ['Gerado em:',    new Date().toLocaleString('pt-BR')],
+                    [],
+                    ['Nome', 'CPF', 'RG', 'Cargo', 'Salário', 'Admissão', 'Status', 'PIX', 'CNH', 'Tipo Pagamento', 'É sócio']
+                ];
+                const linhas = emps.map(e => [
+                    e.name || '',
+                    e.cpf || '',
+                    e.rg || '',
+                    e.role || '',
+                    Number(parseFloat(e.salary) || 0),
+                    e.admission || '',
+                    statusLabel(e.status),
+                    e.pix || '',
+                    e.cnhNumero || '',
+                    e.tipoPagamento || '',
+                    e.ehSocio ? 'Sim' : 'Não'
+                ]);
+                const dados = [...cab, ...linhas];
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.aoa_to_sheet(dados);
+                ws['!cols'] = [
+                    { wch: 28 }, { wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 12 },
+                    { wch: 12 }, { wch: 10 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 8 }
+                ];
+                XLSX.utils.book_append_sheet(wb, ws, 'Colaboradores');
+                XLSX.writeFile(wb, 'Colaboradores_' + new Date().toISOString().split('T')[0] + '.xlsx');
+                if (typeof toast === 'function') toast(emps.length + ' colaborador(es) exportado(s)', 'success');
+            };
+        }
+
+        // batchEnviarNotificacao(): cria uma notificação por colaborador via addNotification
+        if (typeof window.batchEnviarNotificacao !== 'function') {
+            window.batchEnviarNotificacao = function() {
+                const emps = _getSelectedEmployees();
+                if (!emps) return;
+
+                const mensagem = (typeof prompt === 'function')
+                    ? prompt('Digite a mensagem da notificação para os ' + emps.length + ' colaborador(es) selecionado(s):', '')
+                    : '';
+                if (mensagem === null) return;            // cancelado
+                const texto = (mensagem || '').trim();
+                if (!texto) {
+                    if (typeof toast === 'function') toast('Mensagem vazia — operação cancelada', 'warning');
+                    return;
+                }
+                if (typeof addNotification !== 'function') {
+                    if (typeof toast === 'function') toast('Sistema de notificações indisponível', 'error');
+                    return;
+                }
+                emps.forEach(e => {
+                    addNotification({
+                        title:    'Mensagem para ' + (e.name || 'Colaborador'),
+                        message:  texto,
+                        type:     'info',
+                        category: 'equipe',
+                        action:   "nav('equipe')",
+                        actionText: 'Ver equipe'
+                    });
+                });
+                if (typeof toast === 'function') toast(emps.length + ' notificação(ões) enviada(s)', 'success');
+            };
+        }
+
+        // batchGerarDocumentos(): imprime ficha individual de cada colaborador num único documento
+        if (typeof window.batchGerarDocumentos !== 'function') {
+            window.batchGerarDocumentos = function() {
+                if (typeof printDocument !== 'function') {
+                    if (typeof toast === 'function') toast('Sistema de impressão indisponível', 'error');
+                    return;
+                }
+                const emps = _getSelectedEmployees();
+                if (!emps) return;
+                const fmtBR = v => 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const statusLabel = s => s === 'inactive' ? 'Inativo' : s === 'afastado' ? 'Afastado' : s === 'ferias' ? 'Férias' : 'Ativo';
+                const cfg = (typeof db !== 'undefined' && db.config) ? db.config : {};
+
+                const blocos = emps.map(e => `
+                    <div style="border:1px solid #ddd;border-radius:6px;margin-bottom:18px;page-break-inside:avoid">
+                        <div style="background:#1e3a5f;color:#fff;padding:10px 14px;display:flex;justify-content:space-between;align-items:center">
+                            <strong style="font-size:14px">${e.name || '—'}</strong>
+                            <span style="background:#fff;color:#1e3a5f;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:bold">${statusLabel(e.status)}</span>
+                        </div>
+                        <div style="padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11px">
+                            <div><strong>CPF:</strong> ${e.cpf || '-'}</div>
+                            <div><strong>RG:</strong> ${e.rg || '-'}</div>
+                            <div><strong>Cargo:</strong> ${e.role || '-'}</div>
+                            <div><strong>Admissão:</strong> ${e.admission ? new Date(e.admission + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</div>
+                            <div><strong>Salário:</strong> ${fmtBR(e.salary)}</div>
+                            <div><strong>PIX:</strong> ${e.pix || '-'}</div>
+                            <div><strong>CNH:</strong> ${e.cnhNumero || '-'} ${e.cnhCategoria ? '(' + e.cnhCategoria + ')' : ''}</div>
+                            <div><strong>Tipo pgto.:</strong> ${e.tipoPagamento || '-'}</div>
+                            ${e.ehSocio ? `<div style="grid-column:span 2;color:#92400e"><strong>Sócio</strong> — Pró-labore: ${fmtBR(e.proLabore)} • % Lucro: ${(parseFloat(e.percentualLucro) || 0)}%</div>` : ''}
+                            ${e.status === 'inactive' && e.motivoDesligamento ? `<div style="grid-column:span 2;background:#fee2e2;padding:6px;border-radius:4px"><strong>Desligamento:</strong> ${e.motivoDesligamento} ${e.dataDesligamento ? '(' + new Date(e.dataDesligamento + 'T12:00:00').toLocaleDateString('pt-BR') + ')' : ''}</div>` : ''}
+                        </div>
+                    </div>`).join('');
+
+                const html = `
+                    <div class="doc-page">
+                        <div class="doc-header-simple">
+                            <div style="flex:1">
+                                <h1 style="font-size:18px;margin:0;font-weight:bold">${cfg.companyName || 'Empresa'}</h1>
+                                <p style="margin:0;font-size:11px">CNPJ: ${cfg.cnpj || '-'}</p>
+                            </div>
+                        </div>
+                        <div class="doc-title-box">FICHAS DE COLABORADORES (${emps.length})</div>
+                        ${blocos}
+                        <div style="margin-top:30px;text-align:right;font-size:10px;color:#666">Emitido em ${new Date().toLocaleString('pt-BR')}</div>
+                    </div>`;
+                printDocument(html, 'Fichas de Colaboradores');
+            };
+        }
+
         // ===== Stubs (módulos com UI pronta mas lógica pendente) =====
         stub('ajustarOrcamentoIA',          'Ajuste por IA do orçamento');
         stub('atualizarEfetivoRDO',         'Atualização de efetivo do RDO');
-        stub('batchEnviarNotificacao',      'Envio de notificações em lote');
-        stub('batchExportarSelecionados',   'Exportação em lote');
-        stub('batchGerarDocumentos',        'Geração de documentos em lote');
         stub('bimExportQuantitativesPDF',   'Exportar quantitativos BIM (PDF)');
         stub('bimFitAll',                   'Enquadrar tudo (BIM)');
         stub('bimShowSettings',             'Configurações do visualizador BIM');
