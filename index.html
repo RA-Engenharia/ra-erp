@@ -8542,13 +8542,24 @@
 
 
 
-    // Stubs para funções de login (serão sobrescritas depois)
-    window.doLogin = function() { 
-        console.log('doLogin aguardando carregamento...'); 
-        setTimeout(function() { if(typeof doLogin === 'function') doLogin(); }, 100);
+    // V72.52: Stub não-recursivo para doLogin.
+    // O original chamava `setTimeout(doLogin, 100)` se `typeof doLogin === 'function'` — mas o
+    // próprio stub é function, então fazia loop infinito quando o doLogin real não era definido
+    // (ex.: script carrega via file:// ou bloqueio de CDN). Agora: tenta repassar ao real se já
+    // foi sobrescrito; senão avisa o usuário sem travar o navegador.
+    window.doLogin = function _doLoginStub() {
+        if (window.doLogin && window.doLogin !== _doLoginStub) {
+            return window.doLogin.apply(this, arguments);
+        }
+        console.warn('[V72.52] doLogin ainda não carregou — aguarde o carregamento completo do script.');
+        if (typeof toast === 'function') {
+            toast('Sistema ainda carregando. Aguarde alguns segundos e tente novamente.', 'warning');
+        } else {
+            alert('Sistema ainda carregando. Aguarde alguns segundos e tente novamente.');
+        }
     };
-    window.doLoginModal = function() { 
-        console.log('doLoginModal aguardando carregamento...'); 
+    window.doLoginModal = function() {
+        console.warn('doLoginModal ainda não carregou — aguarde o carregamento completo.');
     };
     </script>
     <script>
@@ -126744,6 +126755,8 @@ END-ISO-10303-21;`;
         stub('bimShowSettings',             'Configurações do visualizador BIM');
         stub('bimToggleWireframe',          'Wireframe BIM');
         stub('bimUpdateElementMaterial',    'Atualização de material BIM');
+        stub('bimStartAR',                  'AR (Realidade Aumentada)');
+        stub('bimStopAR',                   'Encerrar AR');
         stub('moverItemParam',              'Reordenação de parâmetros');
 
         console.log('[V72.51] Handlers onclick faltantes resolvidos (helpers + stubs).');
