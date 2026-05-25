@@ -19289,6 +19289,158 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.css">
     <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
 
+    <!-- ═══════════════════════════════════════════════════════════════════════════════
+         V72.53 — TEMA CORPORATIVO NEUTRO (estilo Sienge/Totvs)
+         Override final para suavizar excessos visuais do baseline:
+         - Glassmorphism removido nos painéis principais (solid + borda fina)
+         - Gradientes longos substituídos por sólidos
+         - Cantos arredondados reduzidos (3xl/2xl → 6/8px)
+         - Sombras suavizadas
+         - Animações decorativas neutralizadas
+         Não toca em HTML/JS — só CSS com seletores específicos.
+         ═══════════════════════════════════════════════════════════════════════════════ -->
+    <style id="ra-pro-theme">
+        :root {
+            --pro-border:        #e2e8f0;
+            --pro-border-dark:   #334155;
+            --pro-card-bg:       #ffffff;
+            --pro-card-bg-dark:  #1e293b;
+            --pro-surface:       #f8fafc;
+            --pro-surface-dark:  #0f172a;
+            --pro-shadow:        0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+            --pro-shadow-hover:  0 2px 4px rgba(15, 23, 42, 0.08), 0 4px 8px rgba(15, 23, 42, 0.05);
+            --pro-radius:        6px;
+            --pro-radius-lg:     8px;
+        }
+
+        /* Glass panels viram cards corporativos */
+        .glass-panel {
+            background: var(--pro-card-bg) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            border: 1px solid var(--pro-border) !important;
+            box-shadow: var(--pro-shadow) !important;
+        }
+        html.dark .glass-panel, .dark .glass-panel {
+            background: var(--pro-card-bg-dark) !important;
+            border-color: var(--pro-border-dark) !important;
+        }
+
+        /* Cantos arredondados — reduzir os excessos */
+        .rounded-3xl { border-radius: var(--pro-radius-lg) !important; }
+        .rounded-2xl { border-radius: var(--pro-radius-lg) !important; }
+        .rounded-xl  { border-radius: var(--pro-radius) !important; }
+        .rounded-lg  { border-radius: var(--pro-radius) !important; }
+
+        /* Sombras pesadas → sutis (preserva shadow em modais via .modal e .confirm-modal abaixo) */
+        .shadow-2xl:not(.modal):not(.confirm-modal) { box-shadow: var(--pro-shadow-hover) !important; }
+        .shadow-xl:not(.modal):not(.confirm-modal)  { box-shadow: var(--pro-shadow) !important; }
+        .shadow-lg:not(.modal):not(.confirm-modal)  { box-shadow: var(--pro-shadow) !important; }
+
+        /* Hover translations decorativas suavizadas */
+        .hover\:-translate-y-1:hover { transform: none !important; }
+        .hover\:scale-\[1\.02\]:hover { transform: none !important; }
+
+        /* Gradientes longos → solid color (mantém a cor dominante).
+           Foco nos gradientes mais usados como fundo de cards. */
+        [class*="bg-gradient-to-br"][class*="from-amber-500"][class*="to-orange-600"],
+        [class*="bg-gradient-to-r"][class*="from-amber-500"][class*="to-orange-500"] {
+            background: #d97706 !important;
+        }
+        [class*="bg-gradient-to-br"][class*="from-blue-500"][class*="to-indigo-600"],
+        [class*="bg-gradient-to-r"][class*="from-blue-500"][class*="to-indigo-500"] {
+            background: #2563eb !important;
+        }
+        [class*="bg-gradient-to-br"][class*="from-green-500"][class*="to-emerald-600"],
+        [class*="bg-gradient-to-r"][class*="from-green-500"][class*="to-emerald-500"] {
+            background: #059669 !important;
+        }
+        [class*="bg-gradient-to-br"][class*="from-purple-500"][class*="to-pink-600"] {
+            background: #7c3aed !important;
+        }
+        [class*="bg-gradient-to-br"][class*="from-red-500"][class*="to-rose-600"] {
+            background: #dc2626 !important;
+        }
+        [class*="bg-gradient-to-br"][class*="from-cyan-500"][class*="to-cyan-600"] {
+            background: #0891b2 !important;
+        }
+        [class*="bg-gradient-to-br"][class*="from-emerald-500"][class*="to-teal-600"] {
+            background: #047857 !important;
+        }
+        [class*="bg-gradient-to-br"][class*="from-indigo-500"][class*="to-violet-600"] {
+            background: #4f46e5 !important;
+        }
+        [class*="bg-gradient-to-br"][class*="from-lime-500"][class*="to-green-600"] {
+            background: #65a30d !important;
+        }
+        [class*="bg-gradient-to-r"][class*="from-raBlue"][class*="to-raBlueLight"],
+        [class*="bg-gradient-to-r"][class*="from-raBlue"] {
+            background: #1e3a5f !important;
+        }
+        [class*="bg-gradient-to-br"][class*="from-raGold"] {
+            background: #d4af37 !important;
+        }
+
+        /* Botões — flatten */
+        .btn-modern {
+            box-shadow: var(--pro-shadow) !important;
+            border-radius: var(--pro-radius) !important;
+            transition: background 0.15s, box-shadow 0.15s !important;
+        }
+        .btn-modern:hover {
+            box-shadow: var(--pro-shadow-hover) !important;
+            transform: none !important;
+        }
+
+        /* Inputs — bordas finas consistentes */
+        .input-modern, .sienge-input {
+            border-radius: var(--pro-radius) !important;
+            border-width: 1px !important;
+        }
+
+        /* Cards com border-l-4 colorida — manter (dá identidade ao status) mas
+           afinar a borda lateral */
+        [class*="border-l-4"] {
+            border-left-width: 3px !important;
+        }
+
+        /* Sidebar items — flatten */
+        .sidebar-item {
+            border-radius: var(--pro-radius) !important;
+        }
+
+        /* Modais MANTÊM sombra forte (precisam destaque sobre o overlay) */
+        .modal, .confirm-modal {
+            border-radius: var(--pro-radius-lg) !important;
+        }
+
+        /* Toasts — flatten */
+        .toast {
+            border-radius: var(--pro-radius) !important;
+        }
+
+        /* Backdrop blur global removido (pesado e dispensável) */
+        .backdrop-blur-sm, .backdrop-blur, .backdrop-blur-md {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+
+        /* Tabelas — bordas mais limpas, header mais compacto */
+        table th {
+            font-weight: 600 !important;
+            font-size: 11px !important;
+            letter-spacing: 0.02em !important;
+        }
+        table td {
+            font-size: 13px !important;
+        }
+
+        /* Animações decorativas de entrada — manter mais sutis */
+        .animate-fade-in {
+            animation-duration: 0.18s !important;
+        }
+    </style>
+
     </head>
 <body class="light flex h-screen overflow-hidden">
     <script>
@@ -19628,7 +19780,7 @@
                     <button onclick="nav('orcamentoUnificado')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-file-invoice-dollar w-4 text-emerald-400"></i> Central de Orçamentos</button>
                     <button onclick="nav('sinapi')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-database w-4 text-indigo-400"></i> Banco SINAPI</button>
                     <button onclick="nav('cotacoes')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-balance-scale w-4"></i> Cotações</button>
-                    <button onclick="nav('nfe')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-file-invoice w-4 text-blue-400"></i> 📄 Nota Fiscal (NF-e)</button>
+                    <button onclick="nav('nfe')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-file-invoice w-4 text-blue-400"></i> Nota Fiscal (NF-e)</button>
                 </div>
             </div>
             
@@ -19640,8 +19792,8 @@
                     <i class="fas fa-chevron-down text-xs transition-transform" id="iconMenuMateriais"></i>
                 </button>
                 <div id="menuMateriais" class="submenu ml-4 space-y-1 overflow-hidden transition-all duration-300">
-                    <button onclick="nav('insumos')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-cube w-4 text-cyan-400"></i> 📦 Cadastro de Insumos</button>
-                    <button onclick="nav('compras')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-shopping-cart w-4 text-violet-400"></i> 🛒 Compras</button>
+                    <button onclick="nav('insumos')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-cube w-4 text-cyan-400"></i> Cadastro de Insumos</button>
+                    <button onclick="nav('compras')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-shopping-cart w-4 text-violet-400"></i> Compras</button>
                     <button onclick="nav('fornecedores')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-truck w-4 text-blue-400"></i> Fornecedores</button>
                     <button onclick="nav('estoque')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-boxes w-4"></i> Almoxarifado</button>
                     <button onclick="nav('requisicoes')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-clipboard-list w-4 text-amber-400"></i> Requisições</button>
