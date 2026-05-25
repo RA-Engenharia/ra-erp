@@ -69315,13 +69315,15 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         if(emptyState) emptyState.classList.add('hidden');
         
         const statusBadge = {
-            rascunho: '<span class="bg-slate-500 text-white text-xs px-2 py-1 rounded-full">📝 Rascunho</span>',
-            enviado: '<span class="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">📤 Enviado</span>',
-            negociacao: '<span class="bg-amber-500 text-white text-xs px-2 py-1 rounded-full">💬 Negociação</span>',
-            aprovado: '<span class="bg-green-500 text-white text-xs px-2 py-1 rounded-full">✅ Aprovado</span>',
-            reprovado: '<span class="bg-red-500 text-white text-xs px-2 py-1 rounded-full">❌ Reprovado</span>',
-            executando: '<span class="bg-purple-500 text-white text-xs px-2 py-1 rounded-full">🔨 Executando</span>',
-            concluido: '<span class="bg-emerald-500 text-white text-xs px-2 py-1 rounded-full">🏁 Concluído</span>'
+            rascunho:   '<span class="bg-slate-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-pen mr-1"></i>Rascunho</span>',
+            enviado:    '<span class="bg-blue-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-paper-plane mr-1"></i>Enviado</span>',
+            negociacao: '<span class="bg-amber-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-comments mr-1"></i>Negociação</span>',
+            aprovado:   '<span class="bg-green-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-check mr-1"></i>Aprovado</span>',
+            reprovado:  '<span class="bg-red-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-times mr-1"></i>Reprovado</span>',
+            recusado:   '<span class="bg-red-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-times mr-1"></i>Recusado</span>',
+            expirado:   '<span class="bg-slate-400 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-clock mr-1"></i>Expirado</span>',
+            executando: '<span class="bg-purple-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-hammer mr-1"></i>Executando</span>',
+            concluido:  '<span class="bg-emerald-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-flag-checkered mr-1"></i>Concluído</span>'
         };
         
         tbody.innerHTML = orcs.map(orc => {
@@ -69346,14 +69348,22 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
                     </td>
                     <td class="p-3 text-center">${itens}</td>
                     <td class="p-3 text-right font-bold text-emerald-600">${fmt(orc.totalComBDI || orc.totalSemBDI || 0)}</td>
-                    <td class="p-3 text-center">${statusBadge[orc.status] || statusBadge.rascunho}</td>
+                    <td class="p-3 text-center">
+                        <button onclick="abrirMenuStatusOrcamento('${orc.id}')" class="hover:opacity-75 transition-opacity" title="Alterar status">
+                            ${statusBadge[orc.status] || statusBadge.rascunho}
+                        </button>
+                    </td>
                     <td class="p-3 text-center text-xs text-slate-500">${dataFormatada}</td>
                     <td class="p-3 text-center">
                         <div class="flex items-center justify-center gap-1">
                             <button onclick="editOrcamentoSinapi('${orc.id}')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="Editar"><i class="fas fa-edit"></i></button>
                             <button onclick="duplicarOrcamento('${orc.id}')" class="p-1.5 text-purple-500 hover:bg-purple-50 rounded-lg" title="Duplicar"><i class="fas fa-copy"></i></button>
-                            <button onclick="gerarPropostaDoOrcamento('${orc.id}')" class="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg" title="Proposta"><i class="fas fa-file-contract"></i></button>
+                            <button onclick="exportarOrcamentoCliente('${orc.id}')" class="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg" title="PDF para cliente"><i class="fas fa-file-pdf"></i></button>
+                            <button onclick="gerarPropostaDoOrcamento('${orc.id}')" class="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg" title="Proposta detalhada"><i class="fas fa-file-contract"></i></button>
                             <button onclick="printOrcamentoById('${orc.id}')" class="p-1.5 text-green-500 hover:bg-green-50 rounded-lg" title="Imprimir"><i class="fas fa-print"></i></button>
+                            ${orc.obraIdGerada
+                                ? `<button onclick="if(typeof abrirDashboardObra==='function'){abrirDashboardObra('${orc.obraIdGerada}')}else{nav('obras')}" class="p-1.5 text-teal-500 hover:bg-teal-50 rounded-lg" title="Ver obra gerada"><i class="fas fa-building"></i></button>`
+                                : `<button onclick="converterOrcamentoEmObra('${orc.id}')" class="p-1.5 text-teal-500 hover:bg-teal-50 rounded-lg" title="Converter em obra"><i class="fas fa-arrow-right-from-bracket"></i></button>`}
                             <button onclick="deleteOrcamentoSinapi('${orc.id}')" class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="Excluir"><i class="fas fa-trash"></i></button>
                         </div>
                     </td>
@@ -127283,6 +127293,45 @@ END-ISO-10303-21;`;
                 if (typeof renderOrcamentosUnificado === 'function') renderOrcamentosUnificado();
                 if (typeof atualizarQuickStatsOrcamentos === 'function') atualizarQuickStatsOrcamentos();
                 if (typeof toast === 'function') toast('Status atualizado para "' + novoStatus + '"', 'success');
+            };
+        }
+
+        // abrirMenuStatusOrcamento(id): modal compacto para escolher novo status.
+        // Delega pra marcarOrcamentoStatus que cuida de timestamps e motivoRecusa.
+        if (typeof window.abrirMenuStatusOrcamento !== 'function') {
+            window.abrirMenuStatusOrcamento = function(id) {
+                const orc = _findOrcamento(id);
+                if (!orc) { if (typeof toast === 'function') toast('Orçamento não encontrado', 'error'); return; }
+                document.getElementById('orcStatusMenu')?.remove();
+                const opcoes = [
+                    { v: 'rascunho',   l: 'Rascunho',    i: 'pen',             c: 'bg-slate-500' },
+                    { v: 'enviado',    l: 'Enviado',     i: 'paper-plane',     c: 'bg-blue-500' },
+                    { v: 'negociacao', l: 'Negociação',  i: 'comments',        c: 'bg-amber-500' },
+                    { v: 'aprovado',   l: 'Aprovado',    i: 'check',           c: 'bg-green-500' },
+                    { v: 'recusado',   l: 'Recusado',    i: 'times',           c: 'bg-red-500' },
+                    { v: 'expirado',   l: 'Expirado',    i: 'clock',           c: 'bg-slate-400' }
+                ];
+                const modal = document.createElement('div');
+                modal.id = 'orcStatusMenu';
+                modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000]';
+                modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+                modal.innerHTML = `
+                    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 w-full max-w-sm shadow-2xl">
+                        <h3 class="text-base font-bold mb-1 dark:text-white"><i class="fas fa-flag mr-2 text-blue-500"></i>Alterar status</h3>
+                        <p class="text-xs text-slate-500 mb-4">Orçamento ${orc.codigo || orc.id}</p>
+                        <div class="space-y-2">
+                            ${opcoes.map(op => `
+                                <button onclick="document.getElementById('orcStatusMenu').remove(); marcarOrcamentoStatus('${orc.id}', '${op.v}')"
+                                    class="w-full flex items-center gap-3 px-4 py-3 ${op.c} text-white rounded-lg font-medium text-sm hover:opacity-90 transition-opacity ${orc.status === op.v ? 'ring-2 ring-offset-2 ring-blue-400' : ''}">
+                                    <i class="fas fa-${op.i} w-5"></i>
+                                    <span class="flex-1 text-left">${op.l}</span>
+                                    ${orc.status === op.v ? '<i class="fas fa-check-double opacity-70"></i>' : ''}
+                                </button>
+                            `).join('')}
+                        </div>
+                        <button onclick="document.getElementById('orcStatusMenu').remove()" class="w-full mt-3 py-2 text-sm text-slate-500 hover:text-slate-700">Cancelar</button>
+                    </div>`;
+                document.body.appendChild(modal);
             };
         }
 
