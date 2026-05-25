@@ -19664,6 +19664,7 @@
                     <button onclick="nav('efetivo')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-user-check w-4 text-teal-400"></i> Efetivo Diário</button>
                     <button onclick="nav('ponto')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-clock w-4"></i> Ponto & Faltas</button>
                     <button onclick="nav('bancoHoras')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-hourglass-half w-4"></i> Banco de Horas</button>
+                    <button onclick="nav('horasExtras'); if(typeof renderHorasExtras==='function') renderHorasExtras();" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-business-time w-4 text-amber-400"></i> Horas Extras</button>
                     <button onclick="nav('holerite')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-file-invoice-dollar w-4"></i> Folha & Bônus</button>
                     <button onclick="nav('adiantamentos')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-money-bill-wave w-4"></i> Adiantamentos</button>
                     <button onclick="nav('epi')" class="sidebar-item w-full text-left px-4 py-2 rounded-lg hover:bg-white/10 flex items-center gap-3 hover:text-white transition-all text-xs"><i class="fas fa-helmet-safety w-4"></i> EPIs</button>
@@ -39367,13 +39368,15 @@ A IA identificará os serviços necessários no banco de dados SINAPI e composi�
             try {
                 const transaction = idbConnection.transaction([IDB_STORE_HISTORICO], 'readwrite');
                 const store = transaction.objectStore(IDB_STORE_HISTORICO);
-                
+
+                let _idbFails = 0;
                 historico.forEach(h => {
-                    try { store.put(h); } catch(e) {}
+                    try { store.put(h); } catch(e) { _idbFails++; }
                 });
-                
+                if (_idbFails > 0) console.warn('[IDB] ' + _idbFails + ' registro(s) do histórico falharam ao gravar');
+
                 transaction.oncomplete = () => resolve(true);
-                transaction.onerror = () => resolve(false);
+                transaction.onerror = (ev) => { console.warn('[IDB] Transação histórico falhou:', ev.target?.error?.message || ev); resolve(false); };
             } catch(e) {
                 resolve(false);
             }
@@ -39545,13 +39548,15 @@ A IA identificará os serviços necessários no banco de dados SINAPI e composi�
             try {
                 const transaction = idbConnection.transaction([IDB_STORE_INSUMOS], 'readwrite');
                 const store = transaction.objectStore(IDB_STORE_INSUMOS);
-                
+
+                let _idbFails = 0;
                 insumos.forEach(ins => {
-                    try { store.put(ins); } catch(e) {}
+                    try { store.put(ins); } catch(e) { _idbFails++; }
                 });
-                
+                if (_idbFails > 0) console.warn('[IDB] ' + _idbFails + ' insumo(s) falharam ao gravar');
+
                 transaction.oncomplete = () => resolve(true);
-                transaction.onerror = () => resolve(false);
+                transaction.onerror = (ev) => { console.warn('[IDB] Transação insumos falhou:', ev.target?.error?.message || ev); resolve(false); };
             } catch(e) {
                 resolve(false);
             }
@@ -42792,7 +42797,9 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
                 if(parsed.employees?.length > 0 || parsed.obras?.length > 0) {
                     return; // Dados principais OK
                 }
-            } catch(e) {}
+            } catch(e) {
+                console.warn('[Storage] Dados principais corrompidos (não-JSON) — tentando backups rotativos:', e.message);
+            }
         }
         
         // Tentar recuperar do backup rotativo
@@ -44740,7 +44747,8 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
             custosObra:'Custos por Obra',
             efetivo:'Efetivo Diário',
             'cronograma-fis-fin':'Cronograma Físico-Financeiro',
-            frota:'Frota & Equipamentos'
+            frota:'Frota & Equipamentos',
+            horasExtras:'Controle de Horas Extras'
         };
         const icons = {
             dashboard:'tachometer-alt', obras:'building', equipe:'users', ponto:'clock', holerite:'file-invoice-dollar',
@@ -44761,7 +44769,8 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
             requisicoes:'clipboard-list',
             custosObra:'chart-pie',
             efetivo:'user-check',
-            'cronograma-fis-fin':'chart-line'
+            'cronograma-fis-fin':'chart-line',
+            horasExtras:'business-time'
         };
         document.getElementById('pageTitle').innerHTML = `<i class="fas fa-${icons[view]||'tachometer-alt'} text-raGold mr-3"></i> ${titles[view]||'Dashboard'}`;
         
@@ -44811,6 +44820,7 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
         if(view === 'custosObra') renderCustosObra();
         if(view === 'cotacoes') renderCotacoes();
         if(view === 'cronograma-fis-fin') { cffInit(); cffAtualizarSelectObras(); }
+        if(view === 'horasExtras' && typeof renderHorasExtras === 'function') renderHorasExtras();
         if(view === 'nfe') { initNFeData(); renderNFes(); }
         if(view === 'relatorios' && typeof loadCustosConfig === 'function') loadCustosConfig();
         updateSystem();
