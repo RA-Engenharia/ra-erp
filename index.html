@@ -127192,6 +127192,183 @@ END-ISO-10303-21;`;
             };
         }
 
+        // ═══════════════════════════════════════════════════════════════════════
+        // ORÇAMENTOS — features adicionais (V72.53)
+        // converterOrcamentoEmObra, exportarOrcamentoCliente, marcarOrcamentoStatus
+        // ═══════════════════════════════════════════════════════════════════════
+
+        const _findOrcamento = (id) => {
+            const lista = [...(db.orcamentos || []), ...(db.orcamentosDetalhados || [])];
+            return lista.find(o => String(o.id) === String(id));
+        };
+
+        // converterOrcamentoEmObra(id): cria uma nova obra prefilled a partir de
+        // um orçamento (geralmente aprovado), preservando vínculo via origemOrcamentoId
+        // para rastreabilidade entre o comercial e o operacional.
+        if (typeof window.converterOrcamentoEmObra !== 'function') {
+            window.converterOrcamentoEmObra = function(id) {
+                const orc = _findOrcamento(id);
+                if (!orc) {
+                    if (typeof toast === 'function') toast('Orçamento não encontrado', 'error');
+                    return;
+                }
+                if (orc.obraIdGerada) {
+                    if (typeof confirm !== 'function' ||
+                        !confirm('Este orçamento já gerou a obra "' + (db.obras.find(o => o.id === orc.obraIdGerada)?.name || orc.obraIdGerada) + '". Criar outra mesmo assim?')) {
+                        return;
+                    }
+                }
+                const valor = parseFloat(orc.totalComBDI || orc.total || orc.valor || 0);
+                const nome = (orc.obra || orc.descricao || ('Obra orçamento ' + (orc.codigo || orc.id))).substring(0, 80);
+                const novaObra = {
+                    id: (typeof genId === 'function' ? genId() : ('obra_' + Date.now())),
+                    name: nome,
+                    address: orc.endereco || orc.address || '',
+                    value: valor,
+                    status: 'Em Andamento',
+                    client: orc.cliente || orc.client || '',
+                    startDate: new Date().toISOString().split('T')[0],
+                    fase: 'Iniciação',
+                    origemOrcamentoId: orc.id,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    deviceId: (typeof getDeviceId === 'function' ? getDeviceId() : '')
+                };
+                db.obras = db.obras || [];
+                db.obras.push(novaObra);
+
+                // Marcar orçamento como aprovado e linkar
+                orc.status = 'aprovado';
+                orc.dataAprovacao = orc.dataAprovacao || new Date().toISOString();
+                orc.obraIdGerada = novaObra.id;
+
+                if (typeof saveData === 'function') saveData();
+                if (typeof toast === 'function') toast('Obra "' + nome + '" criada a partir do orçamento', 'success');
+                if (typeof nav === 'function') {
+                    nav('obras');
+                    setTimeout(() => {
+                        if (typeof abrirDashboardObra === 'function') abrirDashboardObra(novaObra.id);
+                    }, 200);
+                }
+            };
+        }
+
+        // marcarOrcamentoStatus(id, novoStatus): aplica transição de status com
+        // captura de motivo quando recusado e timestamp adequado para cada
+        // estado (dataEnvio, dataAprovacao, dataRecusa).
+        if (typeof window.marcarOrcamentoStatus !== 'function') {
+            window.marcarOrcamentoStatus = function(id, novoStatus) {
+                const orc = _findOrcamento(id);
+                if (!orc) {
+                    if (typeof toast === 'function') toast('Orçamento não encontrado', 'error');
+                    return;
+                }
+                const validos = ['rascunho', 'enviado', 'aprovado', 'recusado', 'expirado'];
+                if (!validos.includes(novoStatus)) {
+                    if (typeof toast === 'function') toast('Status inválido: ' + novoStatus, 'error');
+                    return;
+                }
+                const agora = new Date().toISOString();
+                orc.status = novoStatus;
+                if (novoStatus === 'enviado'  && !orc.dataEnvio)      orc.dataEnvio = agora;
+                if (novoStatus === 'aprovado' && !orc.dataAprovacao)  orc.dataAprovacao = agora;
+                if (novoStatus === 'recusado') {
+                    orc.dataRecusa = agora;
+                    const motivo = typeof prompt === 'function'
+                        ? prompt('Motivo da recusa (preço, prazo, concorrência, outro):', orc.motivoRecusa || '')
+                        : '';
+                    if (motivo !== null) orc.motivoRecusa = motivo.trim();
+                }
+                if (typeof saveData === 'function') saveData();
+                if (typeof renderOrcamentosUnificado === 'function') renderOrcamentosUnificado();
+                if (typeof atualizarQuickStatsOrcamentos === 'function') atualizarQuickStatsOrcamentos();
+                if (typeof toast === 'function') toast('Status atualizado para "' + novoStatus + '"', 'success');
+            };
+        }
+
+        // exportarOrcamentoCliente(id): PDF amigável para o cliente — sem BDI,
+        // sem composições internas, sem custos unitários detalhados. Mostra
+        // só descrição/unidade/qtd/valor e total final. Pensado para envio.
+        if (typeof window.exportarOrcamentoCliente !== 'function') {
+            window.exportarOrcamentoCliente = function(id) {
+                if (typeof printDocument !== 'function') {
+                    if (typeof toast === 'function') toast('Sistema de impressão indisponível', 'error');
+                    return;
+                }
+                const orc = _findOrcamento(id);
+                if (!orc) {
+                    if (typeof toast === 'function') toast('Orçamento não encontrado', 'error');
+                    return;
+                }
+                const fmtBR = v => 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const itens = Array.isArray(orc.itens) ? orc.itens : [];
+                const totalApresentado = parseFloat(orc.totalComBDI || orc.total || itens.reduce((s, i) => s + (parseFloat(i.valorTotal || i.total) || 0), 0));
+
+                const linhas = itens.length
+                    ? itens.map((it, idx) => `<tr>
+                        <td style="text-align:center">${idx + 1}</td>
+                        <td>${it.descricao || '-'}</td>
+                        <td style="text-align:center">${it.unidade || '-'}</td>
+                        <td style="text-align:right">${(parseFloat(it.quantidade || it.qtd) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td style="text-align:right">${fmtBR(it.valorTotal || it.total || 0)}</td>
+                      </tr>`).join('')
+                    : '<tr><td colspan="5" style="text-align:center;color:#888">Sem itens</td></tr>';
+
+                const cfg = (typeof db !== 'undefined' && db.config) ? db.config : {};
+                const validadeDias = parseInt(orc.validadeDias || cfg.orcamentoValidade || 30);
+                const dataEmissao = orc.dataEnvio ? new Date(orc.dataEnvio) : new Date();
+                const dataValidade = new Date(dataEmissao);
+                dataValidade.setDate(dataValidade.getDate() + validadeDias);
+
+                const html = `
+                    <div class="doc-page">
+                        <div class="doc-header-simple" style="border-bottom:2px solid #1e3a5f">
+                            <div style="flex:1">
+                                <h1 style="font-size:20px;margin:0;font-weight:bold;color:#1e3a5f">${cfg.companyName || 'Empresa'}</h1>
+                                <p style="margin:2px 0;font-size:11px;color:#475569">CNPJ: ${cfg.cnpj || '-'} &nbsp;•&nbsp; ${cfg.endereco || ''}</p>
+                                <p style="margin:0;font-size:11px;color:#475569">${cfg.telefone || ''} &nbsp;${cfg.email || ''}</p>
+                            </div>
+                        </div>
+                        <div style="background:#1e3a5f;color:#fff;padding:14px 20px;margin:18px 0;border-radius:4px">
+                            <div style="font-size:11px;opacity:0.85;letter-spacing:0.05em;text-transform:uppercase">Proposta Comercial</div>
+                            <div style="font-size:18px;font-weight:bold;margin-top:2px">Nº ${orc.codigo || orc.id}</div>
+                        </div>
+
+                        <table style="margin-bottom:18px;border:none">
+                            <tr><th style="text-align:left;width:120px;border:none;background:transparent;color:#1e3a5f;padding:4px 8px">Cliente</th><td style="border:none;padding:4px 8px">${orc.cliente || '-'}</td></tr>
+                            <tr><th style="text-align:left;border:none;background:transparent;color:#1e3a5f;padding:4px 8px">Obra/Local</th><td style="border:none;padding:4px 8px">${orc.obra || orc.endereco || '-'}</td></tr>
+                            <tr><th style="text-align:left;border:none;background:transparent;color:#1e3a5f;padding:4px 8px">Descrição</th><td style="border:none;padding:4px 8px">${orc.descricao || '-'}</td></tr>
+                            <tr><th style="text-align:left;border:none;background:transparent;color:#1e3a5f;padding:4px 8px">Data emissão</th><td style="border:none;padding:4px 8px">${dataEmissao.toLocaleDateString('pt-BR')}</td></tr>
+                            <tr><th style="text-align:left;border:none;background:transparent;color:#1e3a5f;padding:4px 8px">Validade</th><td style="border:none;padding:4px 8px">${dataValidade.toLocaleDateString('pt-BR')} (${validadeDias} dias)</td></tr>
+                        </table>
+
+                        <h3 style="margin:14px 0 8px;font-size:13px;color:#1e3a5f">Itens da Proposta</h3>
+                        <table>
+                            <thead><tr><th style="width:40px">#</th><th>Descrição</th><th style="width:60px">Un</th><th style="width:80px;text-align:right">Qtd</th><th style="width:120px;text-align:right">Valor (R$)</th></tr></thead>
+                            <tbody>${linhas}</tbody>
+                            <tfoot><tr><th colspan="4" style="text-align:right;background:#1e3a5f;color:#fff;padding:10px">VALOR TOTAL DA PROPOSTA</th><th style="text-align:right;background:#1e3a5f;color:#fff;padding:10px;font-size:14px">${fmtBR(totalApresentado)}</th></tr></tfoot>
+                        </table>
+
+                        ${orc.condicoes || cfg.orcamentoCondicoes ? `
+                            <h3 style="margin:18px 0 6px;font-size:12px;color:#1e3a5f">Condições</h3>
+                            <p style="font-size:11px;color:#475569;line-height:1.6">${orc.condicoes || cfg.orcamentoCondicoes || ''}</p>
+                        ` : ''}
+
+                        <div style="margin-top:50px;display:grid;grid-template-columns:1fr 1fr;gap:30px;font-size:11px">
+                            <div style="border-top:1px solid #1e3a5f;padding-top:6px;text-align:center;color:#1e3a5f">
+                                ${cfg.companyName || 'Prestadora'}<br><span style="font-size:10px;color:#475569">Responsável pela proposta</span>
+                            </div>
+                            <div style="border-top:1px solid #1e3a5f;padding-top:6px;text-align:center;color:#1e3a5f">
+                                ${orc.cliente || 'Cliente'}<br><span style="font-size:10px;color:#475569">Aceite e ciência</span>
+                            </div>
+                        </div>
+
+                        <div style="margin-top:30px;text-align:right;font-size:10px;color:#666">Proposta gerada em ${new Date().toLocaleString('pt-BR')}</div>
+                    </div>`;
+                printDocument(html, 'Proposta ' + (orc.codigo || orc.id) + ' - ' + (orc.cliente || ''));
+            };
+        }
+
         // ===== Stubs (módulos com UI pronta mas lógica pendente) =====
         stub('bimStartAR',                  'AR (Realidade Aumentada)');
         stub('bimStopAR',                   'Encerrar AR');
