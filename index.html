@@ -126749,9 +126749,101 @@ END-ISO-10303-21;`;
             };
         }
 
+        // atualizarEfetivoRDO(): chamada quando o usuário troca a obra no modal RDO.
+        // Pré-preenche o grid de efetivo com a contagem por função (role) dos
+        // funcionários ativos alocados àquela obra (db.employees com obraId).
+        if (typeof window.atualizarEfetivoRDO !== 'function') {
+            window.atualizarEfetivoRDO = function() {
+                const obraId = document.getElementById('rdoCompObra')?.value;
+                const grid = document.getElementById('rdoEfetivoGrid');
+                if (!obraId || !grid) return;
+
+                const ativos = (db.employees || []).filter(e =>
+                    String(e.obraId) === String(obraId) && e.status !== 'inactive');
+                if (ativos.length === 0) {
+                    if (typeof toast === 'function') toast('Esta obra não tem funcionários alocados', 'info');
+                    return;
+                }
+
+                // Conta por função (role)
+                const porFuncao = {};
+                ativos.forEach(e => {
+                    const f = (e.role || 'Sem função').trim() || 'Sem função';
+                    porFuncao[f] = (porFuncao[f] || 0) + 1;
+                });
+
+                // Para cada função, atualiza input existente OU cria novo card
+                Object.entries(porFuncao).forEach(([funcao, count]) => {
+                    let input = grid.querySelector(`.efetivo-input[data-funcao="${CSS.escape(funcao)}"]`);
+                    if (input) {
+                        input.value = count;
+                    } else {
+                        const html = `
+                            <div class="bg-white dark:bg-slate-700 rounded-lg p-3 shadow-sm">
+                                <label class="text-xs font-medium text-slate-600 dark:text-slate-300 block mb-1">${funcao}</label>
+                                <input type="number" class="efetivo-input input-modern w-full text-center font-bold"
+                                    data-funcao="${funcao}" value="${count}" min="0" onchange="calcularTotalEfetivo()">
+                            </div>`;
+                        grid.insertAdjacentHTML('beforeend', html);
+                    }
+                });
+                if (typeof calcularTotalEfetivo === 'function') calcularTotalEfetivo();
+                if (typeof toast === 'function') toast(ativos.length + ' colaborador(es) pré-carregados', 'success');
+            };
+        }
+
+        // moverItemParam(tipo, idx, direcao): reordena itens em db.configObras[tipo].
+        // direcao: -1 = sobe, +1 = desce. Re-abre o modal de parâmetros para refletir.
+        if (typeof window.moverItemParam !== 'function') {
+            window.moverItemParam = function(tipo, idx, direcao) {
+                db.configObras = db.configObras || {};
+                const arr = db.configObras[tipo];
+                if (!Array.isArray(arr)) return;
+                const novoIdx = idx + direcao;
+                if (novoIdx < 0 || novoIdx >= arr.length) return;
+                const tmp = arr[idx];
+                arr[idx] = arr[novoIdx];
+                arr[novoIdx] = tmp;
+                if (typeof saveData === 'function') saveData();
+                if (typeof abrirParametrosObras === 'function') abrirParametrosObras();
+            };
+        }
+
+        // ajustarOrcamentoIA(): abre prompt pedindo ajuste percentual, aplica a todos
+        // os itens do orçamento atual em iaOrcamentoTemp (multiplicando preço unitário
+        // e total). Útil para reajustes inflacionários ou descontos em massa.
+        if (typeof window.ajustarOrcamentoIA !== 'function') {
+            window.ajustarOrcamentoIA = function() {
+                if (!window.iaOrcamentoTemp || !Array.isArray(window.iaOrcamentoTemp.itens) || window.iaOrcamentoTemp.itens.length === 0) {
+                    if (typeof toast === 'function') toast('Gere um orçamento por IA primeiro', 'warning');
+                    return;
+                }
+                const entrada = typeof prompt === 'function'
+                    ? prompt('Ajuste percentual a aplicar nos valores (+10 para subir 10%, -5 para descontar 5%, etc.):', '0')
+                    : '0';
+                if (entrada === null) return;
+                const pct = parseFloat(String(entrada).replace(',', '.'));
+                if (!Number.isFinite(pct)) {
+                    if (typeof toast === 'function') toast('Percentual inválido', 'error');
+                    return;
+                }
+                const fator = 1 + pct / 100;
+                let total = 0;
+                window.iaOrcamentoTemp.itens.forEach(item => {
+                    const unit = parseFloat(item.unit || item.valorUnitario || 0);
+                    item.unit = +(unit * fator).toFixed(2);
+                    if (item.valorUnitario !== undefined) item.valorUnitario = item.unit;
+                    const qtd = parseFloat(item.qtd || item.quantidade || 0);
+                    item.total = +(item.unit * qtd).toFixed(2);
+                    total += item.total;
+                });
+                window.iaOrcamentoTemp.total = +total.toFixed(2);
+                if (typeof renderOrcamentoIA === 'function') renderOrcamentoIA();
+                if (typeof toast === 'function') toast('Ajuste de ' + pct + '% aplicado em ' + window.iaOrcamentoTemp.itens.length + ' itens', 'success');
+            };
+        }
+
         // ===== Stubs (módulos com UI pronta mas lógica pendente) =====
-        stub('ajustarOrcamentoIA',          'Ajuste por IA do orçamento');
-        stub('atualizarEfetivoRDO',         'Atualização de efetivo do RDO');
         stub('bimExportQuantitativesPDF',   'Exportar quantitativos BIM (PDF)');
         stub('bimFitAll',                   'Enquadrar tudo (BIM)');
         stub('bimShowSettings',             'Configurações do visualizador BIM');
@@ -126759,7 +126851,6 @@ END-ISO-10303-21;`;
         stub('bimUpdateElementMaterial',    'Atualização de material BIM');
         stub('bimStartAR',                  'AR (Realidade Aumentada)');
         stub('bimStopAR',                   'Encerrar AR');
-        stub('moverItemParam',              'Reordenação de parâmetros');
 
         console.log('[V72.51] Handlers onclick faltantes resolvidos (helpers + stubs).');
     })();
