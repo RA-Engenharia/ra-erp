@@ -46874,8 +46874,19 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
                     </tr>`).join('')}
                 </tbody>
             </table>
-        
-<script>
+        </body></html>`;
+
+        const win = window.open('', '_blank');
+        win.document.write(html);
+        win.document.close();
+        win.print();
+    }
+
+// V72.52: bloco V72.50 movido para FORA de imprimirFichaFrota — antes ficava
+// DENTRO do template literal da função, e o primeiro ` interno (linha ~47091 em
+// modal.innerHTML = `) fechava o template externo prematuramente, gerando
+// "Unexpected token 'class'" e impedindo a definição de db, doLogin e
+// centenas de funções subsequentes.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 //                        ORÇAMENTO PRO V3 - MELHORIAS PROFISSIONAIS COMPLETAS
 //                                    V72.50 - SINAPI + RELATÓRIOS + BDI
@@ -48249,15 +48260,6 @@ console.log('[V72.50] Carregando Orçamento PRO V3...');
 
 })();
 
-</script>
-</body></html>`;
-        
-        const win = window.open('', '_blank');
-        win.document.write(html);
-        win.document.close();
-        win.print();
-    }
-    
     function saveVeiculo() {
         const id = document.getElementById('veicId').value;
         const data = {
