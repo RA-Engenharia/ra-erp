@@ -56490,7 +56490,7 @@ _${db.config.companyName}_
         if(tab === 'nova') iniciarNovaNFSe();
         if(tab === 'servicos') renderServicosNFSe();
         if(tab === 'tomadores') renderTomadoresNFSe();
-        if(tab === 'config') carregarConfigNFSe();
+        if(tab === 'config') { carregarConfigNFSe(); if(typeof injetarPainelPlugNotas==='function') injetarPainelPlugNotas(); }
         if(tab === 'dashboard') renderNFSeDashboard();
     }
     
@@ -56533,24 +56533,57 @@ _${db.config.companyName}_
         const tb = document.getElementById('tbNFes');
         if(!tb) return;
         
-        const statusColors = { autorizada: 'bg-green-100 text-green-700', pendente: 'bg-yellow-100 text-yellow-700', cancelada: 'bg-slate-100 text-slate-700', substituida: 'bg-blue-100 text-blue-700' };
-        const statusIcons = { autorizada: '✅', pendente: '⏳', cancelada: '🚫', substituida: '🔄' };
-        
+        const statusColors = {
+            autorizada: 'bg-green-100 text-green-700',
+            pendente:   'bg-yellow-100 text-yellow-700',
+            processando:'bg-blue-100 text-blue-700',
+            aguardando: 'bg-blue-100 text-blue-700',
+            rejeitada:  'bg-red-100 text-red-700',
+            erro:       'bg-red-100 text-red-700',
+            cancelada:  'bg-slate-100 text-slate-700',
+            substituida:'bg-blue-100 text-blue-700'
+        };
+        const statusIcons = {
+            autorizada: '<i class="fas fa-check"></i>',
+            pendente:   '<i class="fas fa-clock"></i>',
+            processando:'<i class="fas fa-spinner fa-spin"></i>',
+            aguardando: '<i class="fas fa-spinner fa-spin"></i>',
+            rejeitada:  '<i class="fas fa-times"></i>',
+            erro:       '<i class="fas fa-exclamation"></i>',
+            cancelada:  '<i class="fas fa-ban"></i>',
+            substituida:'<i class="fas fa-sync"></i>'
+        };
+        const plugCfg = (db.config && db.config.nfsePlugNotas) || {};
+        const plugReady = !!(plugCfg.token && plugCfg.cnpjPrestador);
+
         const sorted = [...filtered].sort((a, b) => (b.dataEmissao || '').localeCompare(a.dataEmissao || ''));
-        tb.innerHTML = sorted.map(n => `<tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
-            <td class="p-4 font-mono font-bold text-emerald-600">${n.numero || '-'}</td>
+        tb.innerHTML = sorted.map(n => {
+            const isReal = !!n.plugNotasIdIntegracao;
+            const podeEmitir = plugReady && !isReal && n.status !== 'cancelada';
+            const podeCancelar = isReal && (n.status === 'autorizada' || n.status === 'processando');
+            return `<tr class="hover:bg-emerald-50 dark:hover:bg-emerald-900/20">
+            <td class="p-4 font-mono font-bold text-emerald-600">
+                ${n.numero || '-'}
+                ${isReal ? '<span class="ml-1 text-xs bg-emerald-500 text-white px-1.5 py-0.5 rounded-full" title="Emitida via PlugNotas">REAL</span>' : '<span class="ml-1 text-xs bg-slate-400 text-white px-1.5 py-0.5 rounded-full" title="Apenas registro local">SIM</span>'}
+            </td>
             <td class="p-4 text-slate-500">${n.competencia ? new Date(n.competencia + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</td>
             <td class="p-4"><div class="font-bold dark:text-white text-sm">${(n.tomador?.nome || '-').substring(0, 40)}${(n.tomador?.nome || '').length > 40 ? '...' : ''}</div><div class="text-xs text-slate-500">${n.tomador?.cnpj || ''}</div></td>
-            <td class="p-4 text-xs text-slate-600">${(n.descricaoServico || '-').substring(0, 50)}...</td>
+            <td class="p-4 text-xs text-slate-600">${(n.descricaoServico || '-').substring(0, 50)}${(n.descricaoServico || '').length > 50 ? '...' : ''}</td>
             <td class="p-4 text-right font-bold text-slate-700">${fmt(n.valorServico)}</td>
             <td class="p-4 text-right font-bold text-purple-600">${fmt(n.issApurado)}</td>
             <td class="p-4 text-right font-bold text-green-600">${fmt(n.valorLiquido)}</td>
             <td class="p-4 text-center"><span class="px-2 py-1 rounded-full text-xs font-bold ${statusColors[n.status] || ''}">${statusIcons[n.status] || ''} ${n.status || '-'}</span></td>
             <td class="p-4 text-center">
-                <button onclick="verNFSe('${n.id}')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="Ver"><i class="fas fa-eye"></i></button>
-                ${n.status === 'autorizada' ? `<button onclick="imprimirDANFSe('${n.id}')" class="p-1.5 text-purple-500 hover:bg-purple-50 rounded-lg" title="DANFSe"><i class="fas fa-print"></i></button>` : ''}
+                <div class="flex items-center justify-center gap-1 flex-wrap">
+                    <button onclick="verNFSe('${n.id}')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="Ver"><i class="fas fa-eye"></i></button>
+                    ${podeEmitir ? `<button onclick="emitirNFSeViaPlugNotas('${n.id}')" class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg font-bold" title="Emitir REAL via PlugNotas"><i class="fas fa-paper-plane"></i></button>` : ''}
+                    ${isReal ? `<button onclick="baixarXMLNFSe('${n.id}')" class="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg" title="Baixar XML"><i class="fas fa-code"></i></button>` : ''}
+                    ${isReal ? `<button onclick="baixarPDFNFSe('${n.id}')" class="p-1.5 text-purple-500 hover:bg-purple-50 rounded-lg" title="Baixar DANFSE"><i class="fas fa-file-pdf"></i></button>` : (n.status === 'autorizada' ? `<button onclick="imprimirDANFSe('${n.id}')" class="p-1.5 text-purple-500 hover:bg-purple-50 rounded-lg" title="DANFSe local"><i class="fas fa-print"></i></button>` : '')}
+                    ${podeCancelar ? `<button onclick="cancelarNFSePlugNotas('${n.id}')" class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="Cancelar"><i class="fas fa-ban"></i></button>` : ''}
+                </div>
             </td>
-        </tr>`).join('') || '<tr><td colspan="9" class="p-8 text-center text-slate-500">Nenhuma NFS-e emitida</td></tr>';
+        </tr>`;
+        }).join('') || '<tr><td colspan="9" class="p-8 text-center text-slate-500">Nenhuma NFS-e emitida</td></tr>';
     }
     
     function filtrarNFSeStatus(status) { const sel = document.getElementById('filterNFeStatus'); if(sel) { sel.value = status; renderNFSes(); } }
@@ -127415,6 +127448,397 @@ END-ISO-10303-21;`;
                         <div style="margin-top:30px;text-align:right;font-size:10px;color:#666">Proposta gerada em ${new Date().toLocaleString('pt-BR')}</div>
                     </div>`;
                 printDocument(html, 'Proposta ' + (orc.codigo || orc.id) + ' - ' + (orc.cliente || ''));
+            };
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // PLUGNOTAS — emissão real de NFS-e via REST API
+        // Docs: https://docs.plugnotas.com.br
+        //
+        // Fluxo:
+        //  1. Usuário configura token + ambiente em "Configurar PlugNotas" (modal)
+        //  2. Ao clicar "Emitir REAL" numa NFS-e, montamos o payload no padrão
+        //     ABRASF/PlugNotas e POSTAMOS em /nfse
+        //  3. Resposta vem com idIntegracao + protocolo + status (PROCESSANDO/
+        //     AUTORIZADA/REJEITADA). Guardamos no db.nfses[i] e fazemos poll.
+        //  4. Botões pra baixar XML/PDF DANFSE direto do endpoint do provedor.
+        //
+        // CORS: a API do PlugNotas normalmente exige proxy backend. Suportamos
+        // cfg.proxyUrl pra você apontar pra um pequeno serviço Node (ver
+        // plugnotas-proxy.js no repo). Sem proxy, tentamos o call direto e
+        // explicamos o erro CORS se acontecer.
+        // ═══════════════════════════════════════════════════════════════════════
+
+        const plugNotas = {
+            getCfg() {
+                db.config = db.config || {};
+                db.config.nfsePlugNotas = db.config.nfsePlugNotas || {
+                    token: '', ambiente: 'homologacao', cnpjPrestador: '', proxyUrl: '',
+                    codigoCidadePrestador: '3170206', cnae: '4120-4/00'
+                };
+                return db.config.nfsePlugNotas;
+            },
+            baseUrl(cfg) {
+                if (cfg.proxyUrl) return cfg.proxyUrl.replace(/\/$/, '');
+                return cfg.ambiente === 'producao'
+                    ? 'https://api.plugnotas.com.br'
+                    : 'https://api.sandbox.plugnotas.com.br';
+            },
+            async call(method, path, body) {
+                const cfg = this.getCfg();
+                if (!cfg.token) throw { msg: 'Token PlugNotas não configurado' };
+                const url = this.baseUrl(cfg) + path;
+                const opts = {
+                    method,
+                    headers: { 'x-api-key': cfg.token, 'Content-Type': 'application/json' }
+                };
+                if (cfg.proxyUrl) opts.headers['X-Forwarded-Ambiente'] = cfg.ambiente || 'homologacao';
+                if (body !== undefined) opts.body = JSON.stringify(body);
+                let res;
+                try { res = await fetch(url, opts); }
+                catch (netErr) {
+                    throw {
+                        msg: 'Falha de rede / CORS. Use um proxy Node.js (plugnotas-proxy.js) ou configure proxyUrl. ' + netErr.message,
+                        causa: netErr
+                    };
+                }
+                const text = await res.text();
+                let data; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+                if (!res.ok) {
+                    throw {
+                        msg: data.message || data.error || (res.status + ' ' + res.statusText),
+                        status: res.status, body: data
+                    };
+                }
+                return data;
+            },
+            buildPayloadNFSe(nfse) {
+                const cfg = this.getCfg();
+                const cnpjPrestador = (cfg.cnpjPrestador || db.nfseConfig?.prestador?.cnpj || '').replace(/\D/g, '');
+                const cnpjTomador = (nfse.tomador?.cnpj || '').replace(/\D/g, '');
+                return {
+                    idIntegracao: String(nfse.id),
+                    prestador: { cpfCnpj: cnpjPrestador },
+                    tomador: {
+                        cpfCnpj: cnpjTomador,
+                        razaoSocial: nfse.tomador?.nome || '',
+                        email: nfse.tomador?.email || '',
+                        endereco: {
+                            tipoLogradouro: 'Rua',
+                            logradouro: nfse.tomador?.endereco || '',
+                            numero: nfse.tomador?.numero || 'S/N',
+                            complemento: nfse.tomador?.complemento || '',
+                            bairro: nfse.tomador?.bairro || '',
+                            codigoCidade: cfg.codigoCidadePrestador || '3170206',
+                            estado: nfse.tomador?.uf || 'MG',
+                            cep: (nfse.tomador?.cep || '').replace(/\D/g, '')
+                        }
+                    },
+                    servico: {
+                        codigo: nfse.codigoTributacao || '07.02.02',
+                        discriminacao: nfse.descricaoServico || '',
+                        cnae: cfg.cnae || '4120-4/00',
+                        iss: {
+                            tipoTributacao: 1, exigibilidade: 1,
+                            aliquota: parseFloat(nfse.aliquotaISS) || 5
+                        },
+                        valor: {
+                            servico: parseFloat(nfse.valorServico) || 0,
+                            deducoes: 0,
+                            descontoIncondicionado: parseFloat(nfse.descontoIncondicionado) || 0,
+                            iss: parseFloat(nfse.issApurado) || 0,
+                            baseCalculo: parseFloat(nfse.baseCalculoISS || nfse.valorServico) || 0
+                        }
+                    },
+                    natureza: '1',
+                    regimeEspecialTributacao: (db.nfseConfig?.regime === 'simples_nacional') ? '6' : '0'
+                };
+            }
+        };
+        window.plugNotas = plugNotas;
+
+        // emitirNFSeViaPlugNotas(nfseId): envia uma NFS-e local pro PlugNotas e
+        // atualiza protocolo/status com o retorno real. Dispara um poll de
+        // status até confirmar AUTORIZADA ou REJEITADA.
+        if (typeof window.emitirNFSeViaPlugNotas !== 'function') {
+            window.emitirNFSeViaPlugNotas = async function(nfseId) {
+                const cfg = plugNotas.getCfg();
+                if (!cfg.token) {
+                    if (typeof toast === 'function') toast('Configure o token PlugNotas primeiro', 'warning');
+                    if (typeof window.abrirConfigPlugNotas === 'function') window.abrirConfigPlugNotas();
+                    return;
+                }
+                const nfse = (db.nfses || []).find(n => String(n.id) === String(nfseId));
+                if (!nfse) { if (typeof toast === 'function') toast('NFS-e não encontrada', 'error'); return; }
+
+                const payload = plugNotas.buildPayloadNFSe(nfse);
+                if (typeof toast === 'function') toast('Enviando para PlugNotas (' + cfg.ambiente + ')...', 'info');
+                try {
+                    const resp = await plugNotas.call('POST', '/nfse', [payload]);
+                    const doc = (resp.documents && resp.documents[0]) || (Array.isArray(resp) ? resp[0] : resp);
+                    nfse.protocolo = doc.protocolo || doc.idIntegracao || nfse.protocolo;
+                    nfse.status = (doc.status || 'processando').toLowerCase();
+                    nfse.plugNotasIdIntegracao = doc.idIntegracao;
+                    nfse.plugNotasResposta = doc;
+                    nfse.plugNotasEnviadoEm = new Date().toISOString();
+                    if (typeof saveData === 'function') saveData();
+                    if (typeof toast === 'function') toast('Enviada! Protocolo: ' + nfse.protocolo, 'success');
+                    if (typeof renderNFSes === 'function') renderNFSes();
+                    setTimeout(() => window.consultarStatusNFSePlugNotas(nfse.id), 4000);
+                } catch (err) {
+                    nfse.status = 'erro';
+                    nfse.plugNotasErro = err.msg || String(err);
+                    if (typeof saveData === 'function') saveData();
+                    console.error('[PlugNotas] erro:', err);
+                    if (typeof toast === 'function') toast('Erro: ' + (err.msg || 'falha'), 'error');
+                    if (typeof renderNFSes === 'function') renderNFSes();
+                }
+            };
+        }
+
+        // consultarStatusNFSePlugNotas: poll de status (até 5 tentativas com backoff)
+        if (typeof window.consultarStatusNFSePlugNotas !== 'function') {
+            window.consultarStatusNFSePlugNotas = async function(nfseId, tentativa) {
+                tentativa = tentativa || 1;
+                const nfse = (db.nfses || []).find(n => String(n.id) === String(nfseId));
+                if (!nfse || !nfse.plugNotasIdIntegracao) return;
+                try {
+                    const resp = await plugNotas.call('GET', '/nfse/' + nfse.plugNotasIdIntegracao, undefined);
+                    const status = (resp.status || resp.documents?.[0]?.status || '').toLowerCase();
+                    if (status) {
+                        nfse.status = status;
+                        if (resp.numero) nfse.numero = resp.numero;
+                        if (resp.codigoVerificacao) nfse.codigoVerificacao = resp.codigoVerificacao;
+                        if (resp.linkPdf || resp.pdfUrl) nfse.linkPdf = resp.linkPdf || resp.pdfUrl;
+                        nfse.plugNotasResposta = resp;
+                        if (typeof saveData === 'function') saveData();
+                        if (typeof renderNFSes === 'function') renderNFSes();
+                    }
+                    if (['processando', 'aguardando'].includes(status) && tentativa < 5) {
+                        setTimeout(() => window.consultarStatusNFSePlugNotas(nfseId, tentativa + 1), tentativa * 3000);
+                    } else if (status === 'autorizada' && typeof toast === 'function') {
+                        toast('NFS-e ' + nfse.numero + ' autorizada pela prefeitura', 'success');
+                    } else if (['rejeitada', 'erro'].includes(status) && typeof toast === 'function') {
+                        toast('NFS-e rejeitada: ' + (resp.motivoRejeicao || resp.mensagem || '—'), 'error');
+                    }
+                } catch (err) {
+                    console.warn('[PlugNotas] consulta falhou:', err.msg || err);
+                }
+            };
+        }
+
+        // baixarXMLNFSe / baixarPDFNFSe: usa endpoints do PlugNotas
+        if (typeof window.baixarXMLNFSe !== 'function') {
+            window.baixarXMLNFSe = async function(nfseId) {
+                const nfse = (db.nfses || []).find(n => String(n.id) === String(nfseId));
+                if (!nfse?.plugNotasIdIntegracao) {
+                    if (typeof toast === 'function') toast('Esta NFS-e não foi emitida via PlugNotas', 'warning');
+                    return;
+                }
+                try {
+                    const cfg = plugNotas.getCfg();
+                    const url = plugNotas.baseUrl(cfg) + '/nfse/' + nfse.plugNotasIdIntegracao + '/xml';
+                    const res = await fetch(url, { headers: { 'x-api-key': cfg.token } });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const xml = await res.text();
+                    const blob = new Blob([xml], { type: 'application/xml' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'NFSe_' + (nfse.numero || nfse.id) + '.xml';
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                } catch (err) {
+                    if (typeof toast === 'function') toast('Falha ao baixar XML: ' + err.message, 'error');
+                }
+            };
+        }
+
+        if (typeof window.baixarPDFNFSe !== 'function') {
+            window.baixarPDFNFSe = async function(nfseId) {
+                const nfse = (db.nfses || []).find(n => String(n.id) === String(nfseId));
+                if (!nfse?.plugNotasIdIntegracao) {
+                    if (typeof toast === 'function') toast('Esta NFS-e não foi emitida via PlugNotas', 'warning');
+                    return;
+                }
+                if (nfse.linkPdf) { window.open(nfse.linkPdf, '_blank'); return; }
+                try {
+                    const cfg = plugNotas.getCfg();
+                    const url = plugNotas.baseUrl(cfg) + '/nfse/' + nfse.plugNotasIdIntegracao + '/pdf';
+                    const res = await fetch(url, { headers: { 'x-api-key': cfg.token } });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const blob = await res.blob();
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'DANFSE_' + (nfse.numero || nfse.id) + '.pdf';
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                } catch (err) {
+                    if (typeof toast === 'function') toast('Falha ao baixar PDF: ' + err.message, 'error');
+                }
+            };
+        }
+
+        // cancelarNFSePlugNotas: cancelamento via PlugNotas
+        if (typeof window.cancelarNFSePlugNotas !== 'function') {
+            window.cancelarNFSePlugNotas = async function(nfseId) {
+                const nfse = (db.nfses || []).find(n => String(n.id) === String(nfseId));
+                if (!nfse?.plugNotasIdIntegracao) {
+                    if (typeof toast === 'function') toast('Esta NFS-e não foi emitida via PlugNotas', 'warning');
+                    return;
+                }
+                const motivo = typeof prompt === 'function' ? prompt('Motivo do cancelamento (mínimo 15 caracteres):', '') : '';
+                if (!motivo || motivo.length < 15) {
+                    if (typeof toast === 'function') toast('Motivo deve ter pelo menos 15 caracteres', 'warning');
+                    return;
+                }
+                try {
+                    await plugNotas.call('DELETE', '/nfse/' + nfse.plugNotasIdIntegracao, { justificativa: motivo });
+                    nfse.status = 'cancelada';
+                    nfse.dataCancelamento = new Date().toISOString();
+                    nfse.motivoCancelamento = motivo;
+                    if (typeof saveData === 'function') saveData();
+                    if (typeof toast === 'function') toast('NFS-e cancelada', 'success');
+                    if (typeof renderNFSes === 'function') renderNFSes();
+                } catch (err) {
+                    if (typeof toast === 'function') toast('Falha ao cancelar: ' + (err.msg || err.message || 'erro'), 'error');
+                }
+            };
+        }
+
+        // abrirConfigPlugNotas: modal de configuração
+        if (typeof window.abrirConfigPlugNotas !== 'function') {
+            window.abrirConfigPlugNotas = function() {
+                const cfg = plugNotas.getCfg();
+                document.getElementById('plugNotasConfigModal')?.remove();
+                const modal = document.createElement('div');
+                modal.id = 'plugNotasConfigModal';
+                modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4';
+                modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+                modal.innerHTML = `
+                    <div class="bg-white dark:bg-slate-800 rounded-xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div class="flex items-start justify-between mb-4">
+                            <div>
+                                <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-plug mr-2 text-emerald-600"></i>Provedor PlugNotas</h3>
+                                <p class="text-xs text-slate-500 mt-1">Configuração para emissão REAL de NFS-e</p>
+                            </div>
+                            <button onclick="document.getElementById('plugNotasConfigModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">Token / x-api-key</label>
+                                <input id="pnCfgToken" type="text" class="input-modern w-full font-mono text-xs" placeholder="seu-token-plugnotas" value="${(cfg.token || '').replace(/"/g, '&quot;')}">
+                                <p class="text-[10px] text-slate-400 mt-1">Gere em https://app.plugnotas.com.br → Configurações → Tokens</p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">Ambiente</label>
+                                    <select id="pnCfgAmbiente" class="input-modern w-full">
+                                        <option value="homologacao" ${cfg.ambiente !== 'producao' ? 'selected' : ''}>Homologação (testes)</option>
+                                        <option value="producao" ${cfg.ambiente === 'producao' ? 'selected' : ''}>Produção (emite REAL)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">CNPJ prestador</label>
+                                    <input id="pnCfgCnpj" type="text" class="input-modern w-full" placeholder="59507116000164" value="${(cfg.cnpjPrestador || db.nfseConfig?.prestador?.cnpj || '').replace(/\D/g, '')}">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">Código IBGE cidade</label>
+                                    <input id="pnCfgCidade" type="text" class="input-modern w-full" value="${cfg.codigoCidadePrestador || '3170206'}">
+                                    <p class="text-[10px] text-slate-400 mt-1">3170206 = Uberlândia/MG</p>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">CNAE principal</label>
+                                    <input id="pnCfgCnae" type="text" class="input-modern w-full" value="${cfg.cnae || '4120-4/00'}">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 block mb-1">Proxy URL (opcional)</label>
+                                <input id="pnCfgProxy" type="text" class="input-modern w-full font-mono text-xs" placeholder="http://localhost:3030 (se rodar plugnotas-proxy.js)" value="${(cfg.proxyUrl || '').replace(/"/g, '&quot;')}">
+                                <p class="text-[10px] text-slate-400 mt-1">Use proxy local se o navegador bloquear CORS</p>
+                            </div>
+                            <div class="bg-amber-50 dark:bg-amber-900/20 border-l-3 border-amber-500 p-3 text-xs text-amber-800 dark:text-amber-200">
+                                <strong>Checklist antes de emitir em produção:</strong>
+                                <ol class="list-decimal list-inside mt-1 space-y-0.5">
+                                    <li>Conta criada em app.plugnotas.com.br</li>
+                                    <li>Certificado A1 (.pfx) enviado no portal do PlugNotas</li>
+                                    <li>Empresa cadastrada na PMU como contribuinte</li>
+                                    <li>Testar em homologação primeiro</li>
+                                </ol>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 mt-5">
+                            <button onclick="document.getElementById('plugNotasConfigModal').remove()" class="flex-1 bg-slate-200 dark:bg-slate-600 py-2 rounded-lg font-bold text-sm dark:text-white">Cancelar</button>
+                            <button id="pnCfgTestar" class="flex-1 bg-blue-500 text-white py-2 rounded-lg font-bold text-sm hover:bg-blue-600"><i class="fas fa-vial mr-1"></i>Testar conexão</button>
+                            <button id="pnCfgSalvar" class="flex-1 bg-emerald-500 text-white py-2 rounded-lg font-bold text-sm hover:bg-emerald-600"><i class="fas fa-save mr-1"></i>Salvar</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+
+                const pickup = () => {
+                    cfg.token = document.getElementById('pnCfgToken').value.trim();
+                    cfg.ambiente = document.getElementById('pnCfgAmbiente').value;
+                    cfg.cnpjPrestador = document.getElementById('pnCfgCnpj').value.replace(/\D/g, '');
+                    cfg.codigoCidadePrestador = document.getElementById('pnCfgCidade').value.trim();
+                    cfg.cnae = document.getElementById('pnCfgCnae').value.trim();
+                    cfg.proxyUrl = document.getElementById('pnCfgProxy').value.trim();
+                };
+                document.getElementById('pnCfgSalvar').onclick = () => {
+                    pickup();
+                    db.config.nfsePlugNotas = cfg;
+                    if (typeof saveData === 'function') saveData();
+                    modal.remove();
+                    if (typeof toast === 'function') toast('Configuração PlugNotas salva', 'success');
+                };
+                document.getElementById('pnCfgTestar').onclick = async () => {
+                    pickup();
+                    db.config.nfsePlugNotas = cfg;
+                    try {
+                        const r = await plugNotas.call('GET', '/empresa/' + cfg.cnpjPrestador, undefined);
+                        if (typeof toast === 'function') toast('Conexão OK! Empresa: ' + (r.razaoSocial || r.nome || cfg.cnpjPrestador), 'success');
+                    } catch (err) {
+                        if (typeof toast === 'function') toast('Falhou: ' + (err.msg || 'erro de conexão'), 'error');
+                    }
+                };
+            };
+        }
+
+        // injetarPainelPlugNotas: cria um card no topo da tab Configurações da
+        // view-nfe mostrando status da integração e botão "Configurar".
+        if (typeof window.injetarPainelPlugNotas !== 'function') {
+            window.injetarPainelPlugNotas = function() {
+                const container = document.getElementById('tabContentNFeConfig');
+                if (!container) return;
+                let painel = document.getElementById('plugNotasPainel');
+                if (!painel) {
+                    painel = document.createElement('div');
+                    painel.id = 'plugNotasPainel';
+                    painel.className = 'mb-6';
+                    container.insertBefore(painel, container.firstChild);
+                }
+                const cfg = plugNotas.getCfg();
+                const ok = !!(cfg.token && cfg.cnpjPrestador);
+                const badge = ok
+                    ? '<span class="bg-green-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-check mr-1"></i>Configurado</span>'
+                    : '<span class="bg-amber-500 text-white text-xs px-2 py-1 rounded-full"><i class="fas fa-exclamation mr-1"></i>Não configurado</span>';
+                const ambBadge = cfg.ambiente === 'producao'
+                    ? '<span class="bg-red-500 text-white text-xs px-2 py-1 rounded-full ml-1"><i class="fas fa-broadcast-tower mr-1"></i>Produção</span>'
+                    : '<span class="bg-blue-500 text-white text-xs px-2 py-1 rounded-full ml-1"><i class="fas fa-flask mr-1"></i>Homologação</span>';
+                painel.innerHTML = `
+                    <div class="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-5">
+                        <div class="flex items-start justify-between gap-3 flex-wrap">
+                            <div class="flex-1 min-w-[260px]">
+                                <h3 class="font-bold text-base dark:text-white"><i class="fas fa-plug text-emerald-600 mr-2"></i>Provedor de emissão real (PlugNotas)</h3>
+                                <p class="text-xs text-slate-500 mt-1">Integra com a API do PlugNotas para emitir NFS-e de verdade — sem simulação. Certificado A1 e empresa devem estar cadastrados no portal do PlugNotas.</p>
+                                <div class="mt-2 flex flex-wrap items-center gap-1">${badge}${ambBadge}
+                                    ${cfg.cnpjPrestador ? `<span class="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs px-2 py-1 rounded-full font-mono">${cfg.cnpjPrestador}</span>` : ''}
+                                    ${cfg.proxyUrl ? `<span class="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs px-2 py-1 rounded-full"><i class="fas fa-server mr-1"></i>Via proxy</span>` : ''}
+                                </div>
+                            </div>
+                            <button onclick="abrirConfigPlugNotas()" class="btn-modern btn-primary text-sm"><i class="fas fa-cog mr-1"></i>Configurar</button>
+                        </div>
+                    </div>`;
             };
         }
 
