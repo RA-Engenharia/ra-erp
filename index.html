@@ -19290,155 +19290,305 @@
     <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
 
     <!-- ═══════════════════════════════════════════════════════════════════════════════
-         V72.53 — TEMA CORPORATIVO NEUTRO (estilo Sienge/Totvs)
-         Override final para suavizar excessos visuais do baseline:
-         - Glassmorphism removido nos painéis principais (solid + borda fina)
-         - Gradientes longos substituídos por sólidos
-         - Cantos arredondados reduzidos (3xl/2xl → 6/8px)
-         - Sombras suavizadas
-         - Animações decorativas neutralizadas
-         Não toca em HTML/JS — só CSS com seletores específicos.
+         V72.54 — TEMA MODERNO (estilo Linear/Vercel/Stripe)
+         Substitui o tema corporativo neutro anterior. Foco em:
+         - Hierarquia tipográfica forte (títulos confiantes, tracking-tight)
+         - Espaçamento generoso, respiro entre seções
+         - Cards com borda 1px elegante + glow sutil no hover
+         - Sidebar com indicador vertical no item ativo
+         - Inputs maiores com focus ring (não color shift)
+         - Tabelas com hover row, zebra discreto
+         - Status badges em pill style com bg/text alpha
+         - Transitions 200ms padrão, motion-safe
+         - Paleta: slate base + indigo/emerald accents, gold preservado em CTAs
+         Sem mexer no HTML/JS — só CSS com !important onde necessário.
          ═══════════════════════════════════════════════════════════════════════════════ -->
-    <style id="ra-pro-theme">
+    <style id="ra-modern-theme">
         :root {
-            --pro-border:        #e2e8f0;
-            --pro-border-dark:   #334155;
-            --pro-card-bg:       #ffffff;
-            --pro-card-bg-dark:  #1e293b;
-            --pro-surface:       #f8fafc;
-            --pro-surface-dark:  #0f172a;
-            --pro-shadow:        0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
-            --pro-shadow-hover:  0 2px 4px rgba(15, 23, 42, 0.08), 0 4px 8px rgba(15, 23, 42, 0.05);
-            --pro-radius:        6px;
-            --pro-radius-lg:     8px;
+            /* Paleta moderna */
+            --mod-bg:           #f8fafc;     /* slate-50 — fundo geral */
+            --mod-card:         #ffffff;
+            --mod-border:       rgba(15, 23, 42, 0.08);
+            --mod-border-strong:rgba(15, 23, 42, 0.12);
+            --mod-text:         #0f172a;
+            --mod-text-soft:    #475569;
+            --mod-text-muted:   #94a3b8;
+            --mod-primary:      #4f46e5;     /* indigo-600 */
+            --mod-primary-hover:#4338ca;
+            --mod-accent:       #059669;     /* emerald-600 */
+            --mod-danger:       #dc2626;
+            --mod-warning:      #d97706;
+            --mod-info:         #0284c7;
+            --mod-hover:        #f1f5f9;
+            --mod-active-bg:    rgba(79, 70, 229, 0.08);
+            --mod-active-border:#4f46e5;
+            --mod-shadow-sm:    0 1px 2px rgba(15, 23, 42, 0.05);
+            --mod-shadow:       0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+            --mod-shadow-md:    0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+            --mod-shadow-lg:    0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+            --mod-radius:       8px;
+            --mod-radius-lg:    12px;
+            --mod-radius-full:  9999px;
+            --mod-focus-ring:   0 0 0 3px rgba(79, 70, 229, 0.15);
+        }
+        html.dark, .dark {
+            --mod-bg:           #0b1120;     /* mais escuro que slate-950 pra contraste */
+            --mod-card:         #111827;
+            --mod-border:       rgba(148, 163, 184, 0.12);
+            --mod-border-strong:rgba(148, 163, 184, 0.20);
+            --mod-text:         #f1f5f9;
+            --mod-text-soft:    #cbd5e1;
+            --mod-text-muted:   #64748b;
+            --mod-hover:        rgba(148, 163, 184, 0.08);
+            --mod-active-bg:    rgba(99, 102, 241, 0.15);
+            --mod-shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.4);
+            --mod-shadow:       0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+            --mod-shadow-md:    0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+            --mod-shadow-lg:    0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
         }
 
-        /* Glass panels viram cards corporativos */
+        /* ═══ TIPOGRAFIA ═══ */
+        body {
+            font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+        }
+        h1, h2, h3, h4 {
+            letter-spacing: -0.025em !important;
+            font-weight: 700 !important;
+        }
+        .text-3xl, .text-2xl { line-height: 1.15 !important; letter-spacing: -0.03em !important; }
+        .font-black { font-weight: 800 !important; }
+
+        /* ═══ CARDS ═══ */
         .glass-panel {
-            background: var(--pro-card-bg) !important;
+            background: var(--mod-card) !important;
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
-            border: 1px solid var(--pro-border) !important;
-            box-shadow: var(--pro-shadow) !important;
+            border: 1px solid var(--mod-border) !important;
+            box-shadow: var(--mod-shadow-sm) !important;
+            transition: border-color 0.2s, box-shadow 0.2s !important;
+        }
+        .glass-panel:hover {
+            border-color: var(--mod-border-strong) !important;
+            box-shadow: var(--mod-shadow-md) !important;
         }
         html.dark .glass-panel, .dark .glass-panel {
-            background: var(--pro-card-bg-dark) !important;
-            border-color: var(--pro-border-dark) !important;
+            background: var(--mod-card) !important;
+            border-color: var(--mod-border) !important;
         }
 
-        /* Cantos arredondados — reduzir os excessos */
-        .rounded-3xl { border-radius: var(--pro-radius-lg) !important; }
-        .rounded-2xl { border-radius: var(--pro-radius-lg) !important; }
-        .rounded-xl  { border-radius: var(--pro-radius) !important; }
-        .rounded-lg  { border-radius: var(--pro-radius) !important; }
+        /* ═══ CANTOS ARREDONDADOS ═══ */
+        .rounded-3xl { border-radius: var(--mod-radius-lg) !important; }
+        .rounded-2xl { border-radius: var(--mod-radius-lg) !important; }
+        .rounded-xl  { border-radius: var(--mod-radius) !important; }
+        .rounded-lg  { border-radius: var(--mod-radius) !important; }
+        .rounded-md  { border-radius: 6px !important; }
+        .rounded-full { border-radius: var(--mod-radius-full) !important; }
 
-        /* Sombras pesadas → sutis (preserva shadow em modais via .modal e .confirm-modal abaixo) */
-        .shadow-2xl:not(.modal):not(.confirm-modal) { box-shadow: var(--pro-shadow-hover) !important; }
-        .shadow-xl:not(.modal):not(.confirm-modal)  { box-shadow: var(--pro-shadow) !important; }
-        .shadow-lg:not(.modal):not(.confirm-modal)  { box-shadow: var(--pro-shadow) !important; }
+        /* ═══ SOMBRAS ═══ */
+        .shadow-2xl:not(.modal):not(.confirm-modal) { box-shadow: var(--mod-shadow-md) !important; }
+        .shadow-xl:not(.modal):not(.confirm-modal)  { box-shadow: var(--mod-shadow) !important; }
+        .shadow-lg:not(.modal):not(.confirm-modal)  { box-shadow: var(--mod-shadow-sm) !important; }
+        .shadow-md { box-shadow: var(--mod-shadow-sm) !important; }
+        .modal, .confirm-modal { box-shadow: var(--mod-shadow-lg) !important; border-radius: var(--mod-radius-lg) !important; }
 
-        /* Hover translations decorativas suavizadas */
-        .hover\:-translate-y-1:hover { transform: none !important; }
-        .hover\:scale-\[1\.02\]:hover { transform: none !important; }
+        /* Microinterações decorativas suavizadas (não removidas) */
+        .hover\:-translate-y-1:hover { transform: translateY(-1px) !important; }
+        .hover\:scale-\[1\.02\]:hover { transform: scale(1.005) !important; }
 
-        /* Gradientes longos → solid color (mantém a cor dominante).
-           Foco nos gradientes mais usados como fundo de cards. */
+        /* ═══ GRADIENTES — substituídos por sólidos modernos ═══ */
         [class*="bg-gradient-to-br"][class*="from-amber-500"][class*="to-orange-600"],
-        [class*="bg-gradient-to-r"][class*="from-amber-500"][class*="to-orange-500"] {
-            background: #d97706 !important;
-        }
+        [class*="bg-gradient-to-r"][class*="from-amber-500"][class*="to-orange-500"] { background: #ea580c !important; }
         [class*="bg-gradient-to-br"][class*="from-blue-500"][class*="to-indigo-600"],
-        [class*="bg-gradient-to-r"][class*="from-blue-500"][class*="to-indigo-500"] {
-            background: #2563eb !important;
-        }
+        [class*="bg-gradient-to-r"][class*="from-blue-500"][class*="to-indigo-500"] { background: var(--mod-primary) !important; }
         [class*="bg-gradient-to-br"][class*="from-green-500"][class*="to-emerald-600"],
-        [class*="bg-gradient-to-r"][class*="from-green-500"][class*="to-emerald-500"] {
-            background: #059669 !important;
-        }
-        [class*="bg-gradient-to-br"][class*="from-purple-500"][class*="to-pink-600"] {
-            background: #7c3aed !important;
-        }
-        [class*="bg-gradient-to-br"][class*="from-red-500"][class*="to-rose-600"] {
-            background: #dc2626 !important;
-        }
-        [class*="bg-gradient-to-br"][class*="from-cyan-500"][class*="to-cyan-600"] {
-            background: #0891b2 !important;
-        }
-        [class*="bg-gradient-to-br"][class*="from-emerald-500"][class*="to-teal-600"] {
-            background: #047857 !important;
-        }
-        [class*="bg-gradient-to-br"][class*="from-indigo-500"][class*="to-violet-600"] {
-            background: #4f46e5 !important;
-        }
-        [class*="bg-gradient-to-br"][class*="from-lime-500"][class*="to-green-600"] {
-            background: #65a30d !important;
-        }
+        [class*="bg-gradient-to-r"][class*="from-green-500"][class*="to-emerald-500"] { background: var(--mod-accent) !important; }
+        [class*="bg-gradient-to-br"][class*="from-purple-500"][class*="to-pink-600"] { background: #9333ea !important; }
+        [class*="bg-gradient-to-br"][class*="from-red-500"][class*="to-rose-600"]   { background: var(--mod-danger) !important; }
+        [class*="bg-gradient-to-br"][class*="from-cyan-500"][class*="to-cyan-600"]  { background: #0891b2 !important; }
+        [class*="bg-gradient-to-br"][class*="from-emerald-500"][class*="to-teal-600"] { background: #0d9488 !important; }
+        [class*="bg-gradient-to-br"][class*="from-indigo-500"][class*="to-violet-600"] { background: var(--mod-primary) !important; }
+        [class*="bg-gradient-to-br"][class*="from-lime-500"][class*="to-green-600"] { background: #16a34a !important; }
         [class*="bg-gradient-to-r"][class*="from-raBlue"][class*="to-raBlueLight"],
-        [class*="bg-gradient-to-r"][class*="from-raBlue"] {
-            background: #1e3a5f !important;
-        }
-        [class*="bg-gradient-to-br"][class*="from-raGold"] {
-            background: #d4af37 !important;
-        }
+        [class*="bg-gradient-to-r"][class*="from-raBlue"] { background: #1e293b !important; }
+        [class*="bg-gradient-to-br"][class*="from-raGold"] { background: #d4af37 !important; }
+        [class*="bg-gradient-to-r"][class*="from-emerald-600"][class*="via-green-600"][class*="to-teal-600"] { background: var(--mod-accent) !important; }
 
-        /* Botões — flatten */
+        /* ═══ BOTÕES ═══ */
         .btn-modern {
-            box-shadow: var(--pro-shadow) !important;
-            border-radius: var(--pro-radius) !important;
-            transition: background 0.15s, box-shadow 0.15s !important;
+            border-radius: var(--mod-radius) !important;
+            box-shadow: var(--mod-shadow-sm) !important;
+            font-weight: 600 !important;
+            letter-spacing: -0.01em !important;
+            transition: background 0.15s, box-shadow 0.15s, transform 0.1s !important;
         }
         .btn-modern:hover {
-            box-shadow: var(--pro-shadow-hover) !important;
-            transform: none !important;
+            box-shadow: var(--mod-shadow) !important;
+            transform: translateY(-1px) !important;
         }
+        .btn-modern:active { transform: translateY(0) !important; }
+        .btn-modern:focus-visible { box-shadow: var(--mod-focus-ring) !important; outline: none !important; }
 
-        /* Inputs — bordas finas consistentes */
+        /* ═══ INPUTS ═══ */
         .input-modern, .sienge-input {
-            border-radius: var(--pro-radius) !important;
-            border-width: 1px !important;
+            border-radius: var(--mod-radius) !important;
+            border: 1px solid var(--mod-border-strong) !important;
+            padding: 0.55rem 0.85rem !important;
+            transition: border-color 0.15s, box-shadow 0.15s !important;
+        }
+        .input-modern:focus, .sienge-input:focus,
+        .input-modern:focus-visible, .sienge-input:focus-visible {
+            outline: none !important;
+            border-color: var(--mod-primary) !important;
+            box-shadow: var(--mod-focus-ring) !important;
         }
 
-        /* Cards com border-l-4 colorida — manter (dá identidade ao status) mas
-           afinar a borda lateral */
-        [class*="border-l-4"] {
-            border-left-width: 3px !important;
-        }
-
-        /* Sidebar items — flatten */
+        /* ═══ SIDEBAR — indicador vertical no ativo ═══ */
         .sidebar-item {
-            border-radius: var(--pro-radius) !important;
+            position: relative !important;
+            border-radius: var(--mod-radius) !important;
+            transition: background 0.12s, color 0.12s !important;
+        }
+        .sidebar-item:hover {
+            background: rgba(255, 255, 255, 0.06) !important;
+        }
+        .sidebar-item.active,
+        .sidebar-item[class*="bg-white/10"] {
+            background: rgba(99, 102, 241, 0.18) !important;
+            color: #ffffff !important;
+        }
+        .sidebar-item.active::before,
+        .sidebar-item[class*="bg-white/10"]::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 18%;
+            bottom: 18%;
+            width: 3px;
+            background: #818cf8;
+            border-radius: 0 3px 3px 0;
         }
 
-        /* Modais MANTÊM sombra forte (precisam destaque sobre o overlay) */
-        .modal, .confirm-modal {
-            border-radius: var(--pro-radius-lg) !important;
+        /* ═══ TABELAS — zebra discreto + hover row + th moderno ═══ */
+        table th {
+            font-weight: 600 !important;
+            font-size: 11px !important;
+            letter-spacing: 0.04em !important;
+            text-transform: uppercase !important;
+            color: var(--mod-text-muted) !important;
+        }
+        table td {
+            font-size: 13px !important;
+        }
+        table tr:hover td:not([class*="bg-"]) {
+            background: var(--mod-hover) !important;
         }
 
-        /* Toasts — flatten */
-        .toast {
-            border-radius: var(--pro-radius) !important;
+        /* ═══ STATUS BADGES — pill style moderno (bg-color/15 + text-color) ═══ */
+        span[class*="bg-green-500"][class*="text-white"],
+        span[class*="bg-emerald-500"][class*="text-white"] {
+            background: rgba(16, 185, 129, 0.15) !important;
+            color: #059669 !important;
         }
+        span[class*="bg-blue-500"][class*="text-white"] {
+            background: rgba(59, 130, 246, 0.15) !important;
+            color: #2563eb !important;
+        }
+        span[class*="bg-amber-500"][class*="text-white"],
+        span[class*="bg-yellow-500"][class*="text-white"] {
+            background: rgba(245, 158, 11, 0.15) !important;
+            color: #b45309 !important;
+        }
+        span[class*="bg-red-500"][class*="text-white"] {
+            background: rgba(239, 68, 68, 0.15) !important;
+            color: #dc2626 !important;
+        }
+        span[class*="bg-slate-500"][class*="text-white"],
+        span[class*="bg-slate-400"][class*="text-white"] {
+            background: rgba(100, 116, 139, 0.15) !important;
+            color: #475569 !important;
+        }
+        span[class*="bg-purple-500"][class*="text-white"] {
+            background: rgba(168, 85, 247, 0.15) !important;
+            color: #7c3aed !important;
+        }
+        html.dark span[class*="bg-green-500"][class*="text-white"],
+        html.dark span[class*="bg-emerald-500"][class*="text-white"] { color: #34d399 !important; }
+        html.dark span[class*="bg-blue-500"][class*="text-white"]   { color: #60a5fa !important; }
+        html.dark span[class*="bg-amber-500"][class*="text-white"],
+        html.dark span[class*="bg-yellow-500"][class*="text-white"] { color: #fbbf24 !important; }
+        html.dark span[class*="bg-red-500"][class*="text-white"]    { color: #f87171 !important; }
+        html.dark span[class*="bg-slate-500"][class*="text-white"],
+        html.dark span[class*="bg-slate-400"][class*="text-white"]  { color: #94a3b8 !important; }
+        html.dark span[class*="bg-purple-500"][class*="text-white"] { color: #c084fc !important; }
 
-        /* Backdrop blur global removido (pesado e dispensável) */
+        /* ═══ BORDA LATERAL (status) ═══ */
+        [class*="border-l-4"] { border-left-width: 3px !important; }
+
+        /* ═══ BACKDROP BLUR — removido (peso visual + GPU) ═══ */
         .backdrop-blur-sm, .backdrop-blur, .backdrop-blur-md {
             backdrop-filter: none !important;
             -webkit-backdrop-filter: none !important;
         }
 
-        /* Tabelas — bordas mais limpas, header mais compacto */
-        table th {
-            font-weight: 600 !important;
-            font-size: 11px !important;
-            letter-spacing: 0.02em !important;
-        }
-        table td {
-            font-size: 13px !important;
+        /* ═══ TOASTS — pill style ═══ */
+        .toast {
+            border-radius: var(--mod-radius) !important;
+            box-shadow: var(--mod-shadow-lg) !important;
         }
 
-        /* Animações decorativas de entrada — manter mais sutis */
+        /* ═══ ANIMAÇÕES ═══ */
         .animate-fade-in {
-            animation-duration: 0.18s !important;
+            animation-duration: 0.2s !important;
+            animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1) !important;
         }
+
+        /* ═══ MICROINTERAÇÃO: scroll-bar moderna ═══ */
+        .custom-scroll::-webkit-scrollbar,
+        body::-webkit-scrollbar,
+        *::-webkit-scrollbar { width: 10px; height: 10px; }
+        .custom-scroll::-webkit-scrollbar-track,
+        body::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb,
+        body::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+            border-radius: 5px;
+            border: 2px solid transparent;
+            background-clip: content-box;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb:hover,
+        body::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); background-clip: content-box; }
+
+        /* ═══ SELEÇÃO DE TEXTO ═══ */
+        ::selection { background: rgba(99, 102, 241, 0.25); }
+
+        /* ═══ HEADER PREMIUM DAS VIEWS — neutraliza o gradient verde e adiciona linha sutil ═══ */
+        [class*="from-emerald-600"][class*="via-green-600"][class*="to-teal-600"] {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+            border: 1px solid var(--mod-border-strong) !important;
+        }
+        /* Os botões dentro desse header ficam claros pra contrastar */
+        [class*="from-emerald-600"][class*="via-green-600"][class*="to-teal-600"] button[class*="bg-white"][class*="text-emerald"] {
+            background: var(--mod-accent) !important;
+            color: #fff !important;
+        }
+        [class*="from-emerald-600"][class*="via-green-600"][class*="to-teal-600"] button[class*="bg-emerald-500"] {
+            background: rgba(255, 255, 255, 0.12) !important;
+            backdrop-filter: none !important;
+        }
+
+        /* ═══ DETALHE: links em general mais visíveis ═══ */
+        a[class*="text-blue"], a[class*="text-emerald"], a[class*="text-indigo"] {
+            font-weight: 500;
+        }
+
+        /* ═══ KPI cards mais respiráveis ═══ */
+        .glass-panel.p-4 { padding: 1.15rem !important; }
+        .glass-panel.p-6 { padding: 1.5rem !important; }
+
+        /* Texto monoespaçado em códigos/CNPJ */
+        .font-mono { font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace !important; }
     </style>
 
     </head>
