@@ -75119,16 +75119,16 @@ function renderEtapasPadrao() {
     function renderOrcamentoItens() {
         const unidOpts = UNIDADES_MEDIDA.map(u => `<option value="${u}">${u}</option>`).join('');
         document.getElementById('orcamentoItens').innerHTML = orcamentoItens.map((item, idx) => `
-            <div class="grid grid-cols-12 gap-2 items-center bg-white dark:bg-slate-800 p-2 rounded-lg">
+            <div class="grid grid-cols-12 gap-2 items-center bg-white dark:bg-slate-800 p-2 rounded-lg" data-orc-item-id="${item.id}">
                 <div class="col-span-1 text-center font-bold text-slate-500">${item.num || idx+1}</div>
-                <input class="col-span-4 input-modern" placeholder="Descrição do serviço" value="${item.descricao||''}" onchange="updateOrcItem('${item.id}','descricao',this.value)">
+                <input class="col-span-4 input-modern" data-autocomplete="servico" data-orc-item="${item.id}" placeholder="Descrição (digite p/ buscar SINAPI/Próprias)" value="${(item.descricao||'').replace(/"/g, '&quot;')}" onchange="updateOrcItem('${item.id}','descricao',this.value)">
                 <select class="col-span-1 input-modern text-center text-xs" onchange="updateOrcItem('${item.id}','unidade',this.value)">
                     ${UNIDADES_MEDIDA.map(u => `<option value="${u}" ${item.unidade === u ? 'selected' : ''}>${u}</option>`).join('')}
                 </select>
                 <input type="number" step="0.01" class="col-span-2 input-modern text-center" placeholder="Qtd" value="${item.qtd||''}" onchange="updateOrcItem('${item.id}','qtd',this.value)">
                 <input type="number" step="0.01" class="col-span-2 input-modern text-right" placeholder="0,00" value="${item.unit||''}" onchange="updateOrcItem('${item.id}','unit',this.value)">
                 <span class="col-span-1 font-bold text-green-600 text-right text-sm">${fmt((item.qtd||0) * (item.unit||0))}</span>
-                <button onclick="removeOrcamentoItem('${item.id}')" class="col-span-1 text-red-500 hover:text-red-700 p-1 text-center"><i class="fas fa-trash text-xs"></i></button>
+                <button onclick="removeOrcamentoItem('${item.id}')" class="col-span-1 text-red-500 hover:text-red-700 p-1 text-center" title="Remover"><i class="fas fa-trash text-xs"></i></button>
             </div>
         `).join('') || '<p class="text-center text-slate-400 py-4"><i class="fas fa-plus-circle text-2xl mb-2 block"></i>Adicione itens ao orçamento</p>';
         calcOrcamentoTotal();
@@ -128251,6 +128251,25 @@ END-ISO-10303-21;`;
                     fill('svcCodigo', item.codigo);
                 }
             }
+
+            // Linha de item de orçamento (renderOrcamentoItens): preenche
+            // unidade + preço unitário + marca origem no objeto JS via updateOrcItem
+            const orcItemId = inp.dataset.orcItem;
+            if (orcItemId) {
+                if (typeof orcamentoItens !== 'undefined' && typeof updateOrcItem === 'function') {
+                    updateOrcItem(orcItemId, 'descricao', item.descricao);
+                    if (item.unidade) updateOrcItem(orcItemId, 'unidade', item.unidade);
+                    if (item.custoUnit > 0) updateOrcItem(orcItemId, 'unit', item.custoUnit);
+                    // marca origem pra rastreabilidade (não usa updateOrcItem que filtra)
+                    const obj = orcamentoItens.find(x => x.id === orcItemId);
+                    if (obj) {
+                        obj.origem = item.origem;
+                        obj.origemCodigo = item.codigo;
+                        obj.origemDesc = (item.origem || '').toUpperCase() + ' ' + (item.codigo || '');
+                    }
+                    if (typeof renderOrcamentoItens === 'function') renderOrcamentoItens();
+                }
+            }
         });
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -128767,6 +128786,55 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
             if (typeof saveData === 'function') saveData();
             if (typeof toast === 'function') toast('Composição excluída', 'info');
             window.abrirRevisaoComposicoesIA();
+        };
+
+        // importarTabelaPrecoXLSX(): abre file picker, lê XLSX em base64, envia
+        // pro sinapi-fetcher pra parsear e cachear. Depois carrega no db local.
+        // Funciona pra qualquer tabela suportada (sicro/seinfra/sbc/orse).
+        window.importarTabelaPrecoXLSX = async function(tabela) {
+            const baseUrl = (db.config?.sinapiFetcherUrl || 'http://localhost:3040').replace(/\/$/, '');
+            const cfg = _getTabelasCfg();
+            tabela = tabela || (typeof prompt === 'function' ? prompt('Qual tabela? (sicro, seinfra, sbc, orse)', 'sicro') : '');
+            if (!tabela) return;
+            tabela = tabela.toLowerCase().trim();
+            if (!['sicro', 'seinfra', 'sbc', 'orse', 'sinapi'].includes(tabela)) {
+                if (typeof toast === 'function') toast('Tabela inválida. Use: sicro, seinfra, sbc, orse, sinapi', 'error');
+                return;
+            }
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.xlsx,.xls';
+            input.onchange = async () => {
+                const file = input.files?.[0];
+                if (!file) return;
+                if (typeof toast === 'function') toast('Lendo ' + file.name + ' (' + Math.round(file.size / 1024) + ' KB)...', 'info');
+                try {
+                    const arrayBuf = await file.arrayBuffer();
+                    const bytes = new Uint8Array(arrayBuf);
+                    let bin = '';
+                    for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+                    const b64 = btoa(bin);
+                    if (typeof toast === 'function') toast('Enviando pro fetcher backend...', 'info');
+                    const r1 = await fetch(baseUrl + '/tabela/importar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ tabela, uf: cfg.estadoRegional, mes: cfg.mesReferencia, xlsxBase64: b64 })
+                    });
+                    if (!r1.ok) throw new Error('Backend retornou ' + r1.status);
+                    const j1 = await r1.json();
+                    if (typeof toast === 'function') toast(j1.count + ' registros parseados, carregando no sistema...', 'info');
+                    const r2 = await fetch(baseUrl + '/tabela/dados?tabela=' + tabela + '&uf=' + cfg.estadoRegional + '&mes=' + cfg.mesReferencia);
+                    const j2 = await r2.json();
+                    if (!j2.dados) throw new Error('formato inesperado');
+                    db[tabela] = j2.dados;
+                    if (typeof saveData === 'function') saveData();
+                    if (typeof toast === 'function') toast(tabela.toUpperCase() + ' atualizado: ' + j2.dados.length + ' itens', 'success');
+                } catch (err) {
+                    console.error('[importar tabela]', err);
+                    if (typeof toast === 'function') toast('Falha: ' + err.message + '. Rode `node sinapi-fetcher.js`?', 'error');
+                }
+            };
+            input.click();
         };
 
         // sincronizarSINAPI(): se o sinapi-fetcher.js está rodando (em geral

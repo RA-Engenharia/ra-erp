@@ -142,6 +142,57 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        // POST /tabela/importar — endpoint GENÉRICO: recebe XLSX de qualquer
+        // tabela (SICRO/SEINFRA/SBC/ORSE) via base64 e parseia com heurística.
+        // Body: { tabela: 'sicro'|'seinfra'|'sbc'|'orse', uf: 'MG', mes: '2025-01',
+        //         xlsxBase64: '...' }
+        if (req.method === 'POST' && route === '/tabela/importar') {
+            const chunks = [];
+            req.on('data', c => chunks.push(c));
+            req.on('end', () => {
+                try {
+                    const body = JSON.parse(Buffer.concat(chunks).toString());
+                    const { tabela, uf = 'MG', mes, xlsxBase64 } = body;
+                    if (!tabela || !xlsxBase64) {
+                        res.writeHead(400); res.end('{"error":"tabela e xlsxBase64 obrigatórios"}'); return;
+                    }
+                    const buf = Buffer.from(xlsxBase64, 'base64');
+                    console.log('[' + tabela + '] parseando', buf.length, 'bytes...');
+                    const dados = parseXlsx(buf);
+                    const mesRef = mes || new Date().toISOString().slice(0, 7);
+                    const dir = path.join(CACHE_DIR, mesRef);
+                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                    const arq = cacheFile(mesRef, uf.toUpperCase(), tabela);
+                    fs.writeFileSync(arq, JSON.stringify({ tabela, mes: mesRef, uf, count: dados.length, dados }));
+                    console.log('[' + tabela + '] ok:', dados.length, 'registros →', arq);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ ok: true, tabela, count: dados.length, arquivo: arq }));
+                } catch (err) {
+                    console.error('[importar] erro:', err.message);
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: err.message }));
+                }
+            });
+            return;
+        }
+
+        // GET /tabela/dados?tabela=sicro&mes=YYYY-MM&uf=UF — leitura do cache
+        if (route === '/tabela/dados') {
+            const tabela = url.searchParams.get('tabela');
+            const mes = url.searchParams.get('mes') || new Date().toISOString().slice(0, 7);
+            const uf = (url.searchParams.get('uf') || 'MG').toUpperCase();
+            if (!tabela) { res.writeHead(400); res.end('{"error":"tabela obrigatória"}'); return; }
+            const arq = cacheFile(mes, uf, tabela);
+            if (!fs.existsSync(arq)) {
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'not_cached', tip: 'POST /tabela/importar primeiro' }));
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(fs.readFileSync(arq));
+            return;
+        }
+
         if (req.method === 'POST' && route === '/sinapi/baixar') {
             const chunks = [];
             req.on('data', c => chunks.push(c));
@@ -187,8 +238,10 @@ server.listen(PORT, () => {
     console.log(' Endpoints:');
     console.log('   GET  /health');
     console.log('   GET  /sinapi/listar');
-    console.log('   POST /sinapi/baixar     {mes, uf, tipo}');
+    console.log('   POST /sinapi/baixar       {mes, uf, tipo}      ← SINAPI direto da CAIXA');
     console.log('   GET  /sinapi/dados?mes=YYYY-MM&uf=MG&tipo=composicoes');
+    console.log('   POST /tabela/importar     {tabela, uf, mes, xlsxBase64}  ← genérico SICRO/SEINFRA/SBC/ORSE');
+    console.log('   GET  /tabela/dados?tabela=sicro&mes=YYYY-MM&uf=MG');
     console.log('');
     console.log(' ATENÇÃO: a URL do XLSX no CAIXA muda — se "baixar" der erro,');
     console.log(' confira em caixa.gov.br/sinapi e edite sinapiUrl() neste arquivo.');
