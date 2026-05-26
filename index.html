@@ -128534,12 +128534,12 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
         window.abrirConfigTabelasPreco = function() {
             const cfg = _getTabelasCfg();
             const tabelas = [
-                { id: 'propria', nome: 'Composições Próprias',           campo: 'composicoesProprias', fonte: 'manual + IA' },
-                { id: 'sinapi',  nome: 'SINAPI (CAIXA)',                 campo: 'sinapi',              fonte: 'caixa.gov.br/sinapi' },
-                { id: 'sicro',   nome: 'SICRO (DNIT — obras rodoviárias)', campo: 'sicro',             fonte: 'dnit.gov.br/custos' },
-                { id: 'seinfra', nome: 'SEINFRA (estaduais)',            campo: 'seinfra',             fonte: 'varia por estado' },
-                { id: 'sbc',     nome: 'SBC (CBIC — média BR)',          campo: 'sbc',                 fonte: 'cbicdados.com.br' },
-                { id: 'orse',    nome: 'ORSE (Sergipe)',                 campo: 'orse',                fonte: 'orse.se.gov.br' }
+                { id: 'propria', nome: 'Composições Próprias',           campo: 'composicoesProprias', fonte: 'manual + IA',          urlFonte: '' },
+                { id: 'sinapi',  nome: 'SINAPI (CAIXA)',                 campo: 'sinapi',              fonte: 'caixa.gov.br',          urlFonte: 'https://www.caixa.gov.br/poder-publico/modernizacao-gestao/sinapi/Paginas/default.aspx' },
+                { id: 'sicro',   nome: 'SICRO (DNIT)',                   campo: 'sicro',               fonte: 'gov.br/dnit',           urlFonte: 'https://www.gov.br/dnit/pt-br/assuntos/planejamento-e-pesquisa/custos-e-pagamentos/custos-e-pagamentos-dnit' },
+                { id: 'seinfra', nome: 'SEINFRA-CE',                     campo: 'seinfra',             fonte: 'seinfra.ce.gov.br',    urlFonte: 'https://www.seinfra.ce.gov.br' },
+                { id: 'sbc',     nome: 'SBC (CBIC — média BR)',          campo: 'sbc',                 fonte: 'cbicdados.com.br',     urlFonte: 'https://cbicdados.com.br' },
+                { id: 'orse',    nome: 'ORSE (Sergipe)',                 campo: 'orse',                fonte: 'orse.se.gov.br',        urlFonte: 'http://orse.cehop.se.gov.br' }
             ];
             document.getElementById('cfgTabelasModal')?.remove();
             const modal = document.createElement('div');
@@ -128550,22 +128550,29 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
             const linhasTabelas = tabelas.map(t => {
                 const total = (db[t.campo] || []).length;
                 const ativa = cfg.prioridade.includes(t.id);
-                const ordem = ativa ? cfg.prioridade.indexOf(t.id) + 1 : '—';
+                const podeImportar = t.id !== 'propria';
                 return `<tr class="border-b dark:border-slate-700">
                     <td class="p-2"><input type="checkbox" data-tab="${t.id}" class="cfgTabAtiva" ${ativa ? 'checked' : ''}></td>
                     <td class="p-2">
                         <div class="font-bold dark:text-white text-sm">${t.nome}</div>
-                        <div class="text-[10px] text-slate-500">${t.fonte}</div>
+                        <div class="text-[10px] text-slate-500">
+                            ${t.urlFonte ? `<a href="${t.urlFonte}" target="_blank" class="hover:underline text-blue-500"><i class="fas fa-external-link-alt mr-0.5"></i>${t.fonte}</a>` : t.fonte}
+                        </div>
                     </td>
                     <td class="p-2 text-center font-mono ${total > 0 ? 'text-emerald-600' : 'text-slate-400'}">${total.toLocaleString('pt-BR')}</td>
                     <td class="p-2 text-center text-xs">
                         <input type="number" min="1" data-tab="${t.id}" class="cfgTabOrdem input-modern w-16 text-center" value="${ativa ? cfg.prioridade.indexOf(t.id) + 1 : ''}">
                     </td>
+                    <td class="p-2 text-center">
+                        ${podeImportar
+                            ? `<button onclick="importarTabelaPrecoXLSX('${t.id}')" class="text-xs px-2 py-1 bg-emerald-500 text-white rounded hover:bg-emerald-600" title="Upload XLSX baixado do site oficial"><i class="fas fa-upload mr-1"></i>XLSX</button>`
+                            : `<span class="text-[10px] text-slate-400">via IA / manual</span>`}
+                    </td>
                 </tr>`;
             }).join('');
 
             modal.innerHTML = `
-                <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+                <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
                     <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                         <div>
                             <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-database mr-2 text-emerald-600"></i>Tabelas de Preço</h3>
@@ -128578,7 +128585,7 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
                             <h4 class="text-sm font-bold dark:text-white mb-2">Tabelas habilitadas (ordem = prioridade)</h4>
                             <table class="w-full text-sm">
                                 <thead class="text-xs text-slate-500 uppercase">
-                                    <tr><th class="p-2">Ativa</th><th class="p-2 text-left">Tabela</th><th class="p-2 text-center">Itens</th><th class="p-2 text-center">Ordem</th></tr>
+                                    <tr><th class="p-2">Ativa</th><th class="p-2 text-left">Tabela</th><th class="p-2 text-center">Itens</th><th class="p-2 text-center">Ordem</th><th class="p-2 text-center">Importar</th></tr>
                                 </thead>
                                 <tbody>${linhasTabelas}</tbody>
                             </table>
