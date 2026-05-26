@@ -22522,7 +22522,7 @@
                                 <div class="sienge-form-row">
                                     <div class="sienge-form-group" style="flex:1;">
                                         <label class="sienge-label">Descrição<span style="color:#dc3545;">*</span>:</label>
-                                        <input type="text" id="insumoDescricao" class="sienge-input" placeholder="Nome do insumo...">
+                                        <input type="text" id="insumoDescricao" class="sienge-input" placeholder="Digite p/ buscar nas tabelas (SINAPI/Próprias/etc.)..." data-autocomplete="servico">
                                     </div>
                                 </div>
                                 
@@ -26660,7 +26660,7 @@
                                 
                                 <div class="mt-4">
                                     <label class="text-xs font-bold text-slate-500 mb-1 block">Descrição do Serviço *</label>
-                                    <textarea id="nfseDescricaoServico" class="input-modern w-full" rows="3" placeholder="Descrição detalhada do serviço prestado...
+                                    <textarea id="nfseDescricaoServico" class="input-modern w-full" rows="3" data-autocomplete="servico" placeholder="Descrição detalhada do serviço prestado (digite p/ buscar nas tabelas SINAPI/Próprias)...
 Ex: Prestação de Serviço Engenharia - OBRA: [NOME DA OBRA] RQ X.X.X/A - R0X DD/MM/AAAA ID MEDIÇÃO: XXXX"></textarea>
                                 </div>
                                 
@@ -38237,7 +38237,7 @@ A IA identificará os serviços necessários no banco de dados SINAPI e composi�
                         <option value="">Selecione ou digite abaixo</option>
                     </select>
                 </div>
-                <div><label class="text-xs font-bold text-slate-500">Ou descreva o material *</label><input id="itemReqDescricao" class="input-modern w-full mt-1" placeholder="Nome do material"></div>
+                <div><label class="text-xs font-bold text-slate-500">Ou descreva o material *</label><input id="itemReqDescricao" class="input-modern w-full mt-1" placeholder="Nome do material (digite p/ buscar SINAPI/Próprias)" data-autocomplete="servico"></div>
                 <div class="grid grid-cols-2 gap-4">
                     <div><label class="text-xs font-bold text-slate-500">Quantidade *</label><input type="number" id="itemReqQtd" class="input-modern w-full mt-1" min="0.01" step="0.01" placeholder="0"></div>
                     <div><label class="text-xs font-bold text-slate-500">Unidade *</label><input id="itemReqUnidade" class="input-modern w-full mt-1" placeholder="un, kg, m, m², etc"></div>
@@ -57075,7 +57075,7 @@ _${db.config.companyName}_
     
     function novoServicoNFSe() {
         const html = `<div class="space-y-4"><input type="text" id="svcCodigo" class="input-modern w-full" placeholder="Código (ex: 07.02.02)">
-        <input type="text" id="svcDescricao" class="input-modern w-full" placeholder="Descrição do serviço">
+        <input type="text" id="svcDescricao" class="input-modern w-full" placeholder="Descrição do serviço (digite p/ buscar nas tabelas)" data-autocomplete="servico">
         <input type="number" step="0.01" id="svcAliquota" class="input-modern w-full" placeholder="Alíquota ISS (%)" value="5.00">
         <button onclick="salvarServicoNFSe()" class="btn-modern bg-emerald-500 text-white w-full"><i class="fas fa-save mr-2"></i>Salvar</button></div>`;
         showDynamicModal('Novo Serviço', html);
@@ -128044,6 +128044,214 @@ END-ISO-10303-21;`;
                     </div>`;
             };
         }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // AUTOCOMPLETE INTELIGENTE DE SERVIÇOS
+        // Ativa-se em qualquer input/textarea com atributo data-autocomplete="servico".
+        // Ao digitar 3+ caracteres, mostra dropdown com até 8 matches das tabelas
+        // configuradas ordenados por score. Click preenche descrição + dispara
+        // evento custom 'autocomplete:select' com o item completo (custoUnit,
+        // unidade, origem, etc.) — caller pode escutar pra preencher outros campos.
+        // ═══════════════════════════════════════════════════════════════════════
+
+        let _autoTimer = null;
+        let _autoDropdown = null;
+
+        const _autoFecharDropdown = () => {
+            if (_autoDropdown) {
+                _autoDropdown.remove();
+                _autoDropdown = null;
+            }
+        };
+
+        const _autoCriarDropdown = (input) => {
+            _autoFecharDropdown();
+            const r = input.getBoundingClientRect();
+            const dd = document.createElement('div');
+            dd.id = 'autoServDropdown';
+            dd.style.cssText = `
+                position: fixed;
+                top: ${r.bottom + 2}px;
+                left: ${r.left}px;
+                width: ${Math.max(r.width, 360)}px;
+                max-height: 320px;
+                overflow-y: auto;
+                background: #fff;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+                z-index: 99999;
+                font-size: 13px;
+            `;
+            if (document.documentElement.classList.contains('dark')) {
+                dd.style.background = '#1e293b';
+                dd.style.borderColor = '#334155';
+                dd.style.color = '#e2e8f0';
+            }
+            document.body.appendChild(dd);
+            _autoDropdown = dd;
+            return dd;
+        };
+
+        const _autoRenderCandidatos = (dd, candidatos, input) => {
+            if (candidatos.length === 0) {
+                dd.innerHTML = '<div style="padding:12px;text-align:center;color:#94a3b8;font-style:italic;">Nenhum match nas tabelas. Continue digitando ou use IA.</div>';
+                return;
+            }
+            const origemBadge = {
+                propria: '<span style="background:#10b981;color:#fff;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:bold">PRÓPRIA</span>',
+                sinapi:  '<span style="background:#3b82f6;color:#fff;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:bold">SINAPI</span>',
+                sicro:   '<span style="background:#8b5cf6;color:#fff;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:bold">SICRO</span>',
+                seinfra: '<span style="background:#f59e0b;color:#fff;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:bold">SEINFRA</span>',
+                sbc:     '<span style="background:#ef4444;color:#fff;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:bold">SBC</span>',
+                orse:    '<span style="background:#0891b2;color:#fff;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:bold">ORSE</span>',
+                ia:      '<span style="background:#06b6d4;color:#fff;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:bold">IA</span>'
+            };
+            dd.innerHTML = candidatos.map((c, i) => `
+                <div data-idx="${i}" class="ac-item" style="
+                    padding: 8px 12px;
+                    border-bottom: 1px solid #e2e8f0;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                ">
+                    <div style="flex:1; min-width:0">
+                        <div style="font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${c.descricao}</div>
+                        <div style="font-size:10px; color:#64748b; margin-top:2px">
+                            ${origemBadge[c.origem] || c.origem.toUpperCase()}
+                            <span style="margin-left:4px;font-family:monospace">${c.codigo || ''}</span>
+                            <span style="margin-left:6px">• ${c.unidade}</span>
+                            <span style="margin-left:6px">• score ${(c.score * 100).toFixed(0)}%</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right; font-weight:bold; color:#059669; font-size:13px; flex-shrink:0">
+                        R$ ${(parseFloat(c.custoUnit) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                </div>
+            `).join('');
+
+            // Hover style
+            dd.querySelectorAll('.ac-item').forEach((el, i) => {
+                el.addEventListener('mouseenter', () => el.style.background = document.documentElement.classList.contains('dark') ? '#334155' : '#f1f5f9');
+                el.addEventListener('mouseleave', () => el.style.background = '');
+                el.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    const c = candidatos[i];
+                    input.value = c.descricao;
+                    _autoFecharDropdown();
+                    // Dispara evento custom — caller pode capturar pra preencher outros campos
+                    input.dispatchEvent(new CustomEvent('autocomplete:select', {
+                        detail: c,
+                        bubbles: true
+                    }));
+                    // Também dispara change (compat com onchange handlers)
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+            });
+        };
+
+        const _autoHandleInput = (e) => {
+            const input = e.target;
+            if (!input.matches('[data-autocomplete="servico"]')) return;
+            clearTimeout(_autoTimer);
+            const valor = input.value.trim();
+            if (valor.length < 3) { _autoFecharDropdown(); return; }
+            _autoTimer = setTimeout(() => {
+                if (typeof window.buscarServicoEmTodasTabelas !== 'function') return;
+                const candidatos = window.buscarServicoEmTodasTabelas(valor, { max: 8 });
+                const dd = _autoDropdown || _autoCriarDropdown(input);
+                _autoRenderCandidatos(dd, candidatos, input);
+            }, 200);
+        };
+
+        const _autoHandleBlur = (e) => {
+            // Pequeno delay pra permitir mousedown nas opções
+            setTimeout(() => _autoFecharDropdown(), 150);
+        };
+
+        const _autoHandleKey = (e) => {
+            if (!e.target.matches('[data-autocomplete="servico"]')) return;
+            if (e.key === 'Escape') { _autoFecharDropdown(); return; }
+            if (!_autoDropdown) return;
+            const items = _autoDropdown.querySelectorAll('.ac-item');
+            if (items.length === 0) return;
+            const ativo = _autoDropdown.querySelector('.ac-item-active');
+            let idx = ativo ? parseInt(ativo.dataset.idx) : -1;
+            if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, items.length - 1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); }
+            else if (e.key === 'Enter' && idx >= 0) {
+                e.preventDefault();
+                items[idx].dispatchEvent(new MouseEvent('mousedown'));
+                return;
+            }
+            else return;
+            items.forEach(el => {
+                el.classList.remove('ac-item-active');
+                el.style.background = '';
+            });
+            const cur = items[idx];
+            cur.classList.add('ac-item-active');
+            cur.style.background = document.documentElement.classList.contains('dark') ? '#475569' : '#dbeafe';
+            cur.scrollIntoView({ block: 'nearest' });
+        };
+
+        // Bindings globais delegados (uma vez só)
+        if (!window.__autoServBound) {
+            document.addEventListener('input', _autoHandleInput, true);
+            document.addEventListener('blur', _autoHandleBlur, true);
+            document.addEventListener('keydown', _autoHandleKey, true);
+            window.addEventListener('scroll', _autoFecharDropdown, true);
+            window.addEventListener('resize', _autoFecharDropdown);
+            window.__autoServBound = true;
+        }
+
+        // ativarAutocompleteEm(seletor): atribui data-autocomplete a inputs
+        // que já existem mas não têm o atributo. Use depois de renderizar
+        // modais/forms dinâmicos.
+        window.ativarAutocompleteEm = function(seletor) {
+            document.querySelectorAll(seletor).forEach(el => {
+                if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                    el.setAttribute('data-autocomplete', 'servico');
+                }
+            });
+        };
+
+        // Auto-fill de campos relacionados quando user escolhe item do autocomplete.
+        // Cada handler observa qual input disparou e popula campos vizinhos.
+        document.addEventListener('autocomplete:select', (e) => {
+            const item = e.detail; if (!item) return;
+            const inp = e.target;
+            const fill = (id, val) => { const el = document.getElementById(id); if (el && (el.value === '' || el.value === '0')) el.value = val; };
+
+            // NFS-e: preenche valor do serviço + alíquota com base no código tributário
+            if (inp.id === 'nfseDescricaoServico') {
+                if (item.custoUnit > 0) fill('nfseValorServico', item.custoUnit.toFixed(2));
+            }
+            // Insumo SINAPI cadastrado novo: preenche código, unidade, preço
+            if (inp.id === 'insumoDescricao') {
+                if (item.codigo) fill('insumoCodigo', item.codigo);
+                if (item.unidade) fill('insumoUnidade', item.unidade);
+                if (item.custoUnit > 0) fill('insumoPreco', item.custoUnit.toFixed(2));
+            }
+            // Requisição de material: preenche unidade + preço unit
+            if (inp.id === 'itemReqDescricao') {
+                if (item.unidade) {
+                    const u = document.getElementById('itemReqUnidade');
+                    if (u && u.value === '') u.value = item.unidade;
+                }
+                if (item.custoUnit > 0) {
+                    const p = document.getElementById('itemReqPreco');
+                    if (p && (p.value === '' || p.value === '0')) p.value = item.custoUnit.toFixed(2);
+                }
+            }
+            // Serviço NFS-e novo: preenche alíquota padrão se for da SINAPI
+            if (inp.id === 'svcDescricao') {
+                if (item.codigo && /^\d{2}\.\d{2}/.test(item.codigo)) {
+                    fill('svcCodigo', item.codigo);
+                }
+            }
+        });
 
         // ═══════════════════════════════════════════════════════════════════════
         // MOTOR DE ORÇAMENTO INTELIGENTE — V72.53
