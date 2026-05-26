@@ -29160,6 +29160,12 @@ Ex: Prestação de Serviço Engenharia - OBRA: [NOME DA OBRA] RQ X.X.X/A - R0X D
                             <button onclick="abrirAssistenteOrcamento()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all">
                                 <i class="fas fa-robot"></i>Assistente IA
                             </button>
+                            <button onclick="abrirConfigTabelasPreco()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all" title="Configurar SINAPI, SBC, SICRO, SEINFRA, ORSE + fallback IA">
+                                <i class="fas fa-database"></i>Tabelas + IA
+                            </button>
+                            <button onclick="sincronizarSINAPI()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all" title="Baixar/atualizar SINAPI do site da CAIXA (precisa rodar sinapi-fetcher.js)">
+                                <i class="fas fa-cloud-download-alt"></i>Atualizar SINAPI
+                            </button>
                             <button onclick="importarEscopoInteligente()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all">
                                 <i class="fas fa-magic"></i>Importar Escopo
                             </button>
@@ -128034,6 +128040,459 @@ END-ISO-10303-21;`;
                     </div>`;
             };
         }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // MOTOR DE ORÇAMENTO INTELIGENTE — V72.53
+        // Cruza todas as tabelas de preço locais (próprias, SINAPI, SBC, SICRO,
+        // SEINFRA, ORSE) com scoring por relevância e prioridade. Fallback via
+        // IA (Groq) gera composição própria quando nenhum match decente.
+        //
+        // NOTA: auto-fetch das planilhas oficiais (CAIXA/SINAPI mensal) exige
+        // backend Node.js (CORS + tamanho de arquivo). Aqui usamos só os dados
+        // que já estão no db local; a importação manual continua via tab SINAPI.
+        // ═══════════════════════════════════════════════════════════════════════
+
+        const _getTabelasCfg = () => {
+            db.config = db.config || {};
+            db.config.tabelasPrecoConfig = db.config.tabelasPrecoConfig || {
+                prioridade: ['propria', 'sinapi', 'sicro', 'seinfra', 'sbc', 'orse'],
+                estadoRegional: 'MG',
+                mesReferencia: new Date().toISOString().slice(0, 7),
+                fallbackIA: true,
+                limiarScore: 0.35,
+                maxCandidatos: 5
+            };
+            return db.config.tabelasPrecoConfig;
+        };
+
+        // Tokeniza string em palavras significativas (sem acentos, sem stopwords)
+        const _tokens = (s) => {
+            if (!s) return [];
+            const semAcento = String(s).toLowerCase()
+                .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                .replace(/[^a-z0-9\s]/g, ' ');
+            const stop = new Set(['de','da','do','e','com','sem','para','por','em','no','na','os','as','um','uma','ou','a','o','que','se','x']);
+            return semAcento.split(/\s+/).filter(t => t.length >= 2 && !stop.has(t));
+        };
+
+        const _score = (descCandidato, tokensBusca, codigoCandidato) => {
+            const descTokens = _tokens(descCandidato);
+            if (descTokens.length === 0) return 0;
+            const descSet = new Set(descTokens);
+            let hits = 0;
+            tokensBusca.forEach(t => { if (descSet.has(t)) hits++; });
+            if (hits === 0) {
+                // tenta substring (cobrir variações: alvenaria vs alvenarias)
+                const descJoin = descTokens.join(' ');
+                tokensBusca.forEach(t => { if (descJoin.includes(t)) hits += 0.5; });
+            }
+            let score = tokensBusca.length > 0 ? hits / tokensBusca.length : 0;
+            // boost se o código bate (raro mas forte)
+            const codTokens = _tokens(codigoCandidato);
+            if (codTokens.some(c => tokensBusca.includes(c))) score += 0.15;
+            return Math.min(score, 1.5);
+        };
+
+        // buscarServicoEmTodasTabelas(descricao): retorna top N candidatos com
+        // {origem, codigo, descricao, unidade, custoUnit, score} ordenados por
+        // (score + bônus de prioridade da tabela).
+        window.buscarServicoEmTodasTabelas = function(descricao, opts) {
+            opts = opts || {};
+            const cfg = _getTabelasCfg();
+            const max = opts.max || cfg.maxCandidatos;
+            const tokensBusca = _tokens(descricao);
+            if (tokensBusca.length === 0) return [];
+
+            const tabelas = {
+                propria: db.composicoesProprias || [],
+                sinapi:  db.sinapi || [],
+                sicro:   db.sicro || [],
+                seinfra: db.seinfra || [],
+                sbc:     db.sbc || [],
+                orse:    db.orse || []
+            };
+            const prioridade = cfg.prioridade;
+            const candidatos = [];
+
+            Object.entries(tabelas).forEach(([nome, lista]) => {
+                if (!Array.isArray(lista) || lista.length === 0) return;
+                const idxPri = prioridade.indexOf(nome);
+                const bonusPri = idxPri >= 0 ? (prioridade.length - idxPri) * 0.03 : 0;
+                lista.forEach(item => {
+                    const desc = item.descricao || item.nome || item.servico || '';
+                    if (!desc) return;
+                    const s = _score(desc, tokensBusca, item.codigo);
+                    if (s < cfg.limiarScore) return;
+                    candidatos.push({
+                        origem: nome,
+                        codigo: item.codigo || item.id || '',
+                        descricao: desc,
+                        unidade: item.unidade || item.un || 'un',
+                        custoUnit: parseFloat(item.custoUnitario || item.custoTotal || item.preco || item.custoBase || 0),
+                        score: +(s + bonusPri).toFixed(3),
+                        raw: item
+                    });
+                });
+            });
+
+            candidatos.sort((a, b) => b.score - a.score);
+            return candidatos.slice(0, max);
+        };
+
+        // gerarComposicaoViaIA(descricao): usa chamarGroqAPI (Groq) pra gerar
+        // composição estruturada quando não há match nas tabelas. Salva em
+        // db.composicoesProprias com flag origem='ia' pra revisão posterior.
+        window.gerarComposicaoViaIA = async function(descricao, contexto) {
+            if (typeof chamarGroqAPI !== 'function') {
+                if (typeof toast === 'function') toast('IA não configurada — vá em Config > IA', 'warning');
+                return null;
+            }
+            const cfg = _getTabelasCfg();
+            const regiao = cfg.estadoRegional || 'MG';
+            const prompt = `Gere uma composição de custo unitário para o serviço de construção civil abaixo, em formato JSON estrito.
+
+Serviço: "${descricao}"
+Região: ${regiao} (Brasil)
+${contexto ? 'Contexto adicional: ' + contexto : ''}
+
+Retorne APENAS JSON neste formato exato (sem markdown, sem texto extra):
+{
+  "descricao": "...",
+  "unidade": "m² ou m³ ou m ou kg ou un",
+  "insumos": [
+    {"tipo":"MAT","descricao":"...","unidade":"...","coeficiente":0.0,"custoUnit":0.0},
+    {"tipo":"MO","descricao":"Pedreiro","unidade":"h","coeficiente":0.0,"custoUnit":25.00},
+    {"tipo":"EQ","descricao":"...","unidade":"h","coeficiente":0.0,"custoUnit":0.0}
+  ]
+}
+
+Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, MO=Mão de Obra, EQ=Equipamento.`;
+
+            try {
+                const resposta = await chamarGroqAPI(prompt, 'Você é um engenheiro orçamentista. Responda APENAS JSON válido, sem markdown.');
+                let parsed;
+                try {
+                    const jsonMatch = resposta.match(/\{[\s\S]*\}/);
+                    parsed = JSON.parse(jsonMatch ? jsonMatch[0] : resposta);
+                } catch (e) {
+                    if (typeof toast === 'function') toast('IA retornou formato inválido', 'error');
+                    console.warn('[IA composição] resposta:', resposta);
+                    return null;
+                }
+                if (!parsed.insumos || !Array.isArray(parsed.insumos) || parsed.insumos.length === 0) {
+                    if (typeof toast === 'function') toast('IA não retornou insumos', 'error');
+                    return null;
+                }
+                const total = parsed.insumos.reduce((s, i) =>
+                    s + (parseFloat(i.coeficiente) || 0) * (parseFloat(i.custoUnit) || 0), 0);
+                const composicao = {
+                    id: 'ia_' + Date.now(),
+                    codigo: 'IA-' + Date.now().toString(36).toUpperCase().slice(-6),
+                    descricao: parsed.descricao || descricao,
+                    categoria: 'Gerado por IA',
+                    unidade: parsed.unidade || 'un',
+                    custoTotal: +total.toFixed(2),
+                    insumos: parsed.insumos.map(i => ({
+                        tipo: i.tipo || 'MAT',
+                        descricao: i.descricao || '',
+                        unidade: i.unidade || 'un',
+                        coeficiente: parseFloat(i.coeficiente) || 0,
+                        custoUnit: parseFloat(i.custoUnit) || 0
+                    })),
+                    origem: 'ia',
+                    iaPrompt: descricao,
+                    iaRegiao: regiao,
+                    revisada: false,
+                    dataCriacao: new Date().toISOString()
+                };
+                db.composicoesProprias = db.composicoesProprias || [];
+                db.composicoesProprias.push(composicao);
+                if (typeof saveData === 'function') saveData();
+                return composicao;
+            } catch (err) {
+                console.error('[IA composição] erro:', err);
+                if (typeof toast === 'function') toast('Erro IA: ' + (err.message || err), 'error');
+                return null;
+            }
+        };
+
+        // resolverItemOrcamento(descricao, quantidade): função principal usada
+        // pela elaboração inteligente de orçamento. Retorna 1 item resolvido
+        // com origem rastreável. Fluxo:
+        //   1. buscarServicoEmTodasTabelas → se top.score >= limiar, usa
+        //   2. senão, se fallbackIA ligado, gerarComposicaoViaIA cria nova
+        //   3. senão, retorna stub manual pra usuário preencher
+        window.resolverItemOrcamento = async function(descricao, quantidade) {
+            const qtd = parseFloat(quantidade) || 1;
+            const cfg = _getTabelasCfg();
+            const candidatos = window.buscarServicoEmTodasTabelas(descricao);
+
+            if (candidatos.length > 0 && candidatos[0].score >= cfg.limiarScore + 0.1) {
+                const c = candidatos[0];
+                return {
+                    descricao: c.descricao,
+                    unidade: c.unidade,
+                    quantidade: qtd,
+                    custoUnit: c.custoUnit,
+                    valorTotal: +(c.custoUnit * qtd).toFixed(2),
+                    origem: c.origem,
+                    origemCodigo: c.codigo,
+                    origemDesc: c.origem.toUpperCase() + ' ' + c.codigo,
+                    alternativas: candidatos.slice(1, 4).map(a => ({ origem: a.origem, codigo: a.codigo, custoUnit: a.custoUnit }))
+                };
+            }
+
+            if (cfg.fallbackIA) {
+                if (typeof toast === 'function') toast('Sem match nas tabelas. Gerando via IA: ' + descricao.substring(0, 40) + '...', 'info');
+                const comp = await window.gerarComposicaoViaIA(descricao);
+                if (comp) {
+                    return {
+                        descricao: comp.descricao,
+                        unidade: comp.unidade,
+                        quantidade: qtd,
+                        custoUnit: comp.custoTotal,
+                        valorTotal: +(comp.custoTotal * qtd).toFixed(2),
+                        origem: 'ia',
+                        origemCodigo: comp.codigo,
+                        origemDesc: 'IA gerada — revisar',
+                        composicaoId: comp.id
+                    };
+                }
+            }
+
+            // Último recurso: stub manual
+            return {
+                descricao: descricao,
+                unidade: 'un',
+                quantidade: qtd,
+                custoUnit: 0,
+                valorTotal: 0,
+                origem: 'manual',
+                origemDesc: 'Preencher manualmente'
+            };
+        };
+
+        // resolverEscopoCompleto(itens): processa array de itens (do escopo
+        // gerado por IA, importado, etc.) e devolve array resolvido. Mostra
+        // progress no console e retorna estatística por origem.
+        window.resolverEscopoCompleto = async function(itens) {
+            if (!Array.isArray(itens)) return [];
+            const resolvidos = [];
+            const stats = { propria: 0, sinapi: 0, sicro: 0, seinfra: 0, sbc: 0, orse: 0, ia: 0, manual: 0 };
+            for (let i = 0; i < itens.length; i++) {
+                const item = itens[i];
+                const desc = item.descricao || item.servico || item.nome || '';
+                const qtd = parseFloat(item.quantidade || item.qtd || 1) || 1;
+                if (typeof toast === 'function' && i % 5 === 0) {
+                    toast('Resolvendo ' + (i + 1) + '/' + itens.length + '...', 'info');
+                }
+                const resolvido = await window.resolverItemOrcamento(desc, qtd);
+                resolvido.id = (typeof genId === 'function' ? genId() : ('item_' + Date.now() + '_' + i));
+                resolvidos.push(resolvido);
+                stats[resolvido.origem] = (stats[resolvido.origem] || 0) + 1;
+            }
+            console.log('[Orçamento Inteligente] Stats:', stats);
+            if (typeof toast === 'function') {
+                const linhas = Object.entries(stats).filter(([_, v]) => v > 0).map(([k, v]) => k.toUpperCase() + ': ' + v);
+                toast('Escopo resolvido — ' + linhas.join(' | '), 'success');
+            }
+            return resolvidos;
+        };
+
+        // abrirConfigTabelasPreco: modal de configuração
+        window.abrirConfigTabelasPreco = function() {
+            const cfg = _getTabelasCfg();
+            const tabelas = [
+                { id: 'propria', nome: 'Composições Próprias',           campo: 'composicoesProprias', fonte: 'manual + IA' },
+                { id: 'sinapi',  nome: 'SINAPI (CAIXA)',                 campo: 'sinapi',              fonte: 'caixa.gov.br/sinapi' },
+                { id: 'sicro',   nome: 'SICRO (DNIT — obras rodoviárias)', campo: 'sicro',             fonte: 'dnit.gov.br/custos' },
+                { id: 'seinfra', nome: 'SEINFRA (estaduais)',            campo: 'seinfra',             fonte: 'varia por estado' },
+                { id: 'sbc',     nome: 'SBC (CBIC — média BR)',          campo: 'sbc',                 fonte: 'cbicdados.com.br' },
+                { id: 'orse',    nome: 'ORSE (Sergipe)',                 campo: 'orse',                fonte: 'orse.se.gov.br' }
+            ];
+            document.getElementById('cfgTabelasModal')?.remove();
+            const modal = document.createElement('div');
+            modal.id = 'cfgTabelasModal';
+            modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4';
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+            const linhasTabelas = tabelas.map(t => {
+                const total = (db[t.campo] || []).length;
+                const ativa = cfg.prioridade.includes(t.id);
+                const ordem = ativa ? cfg.prioridade.indexOf(t.id) + 1 : '—';
+                return `<tr class="border-b dark:border-slate-700">
+                    <td class="p-2"><input type="checkbox" data-tab="${t.id}" class="cfgTabAtiva" ${ativa ? 'checked' : ''}></td>
+                    <td class="p-2">
+                        <div class="font-bold dark:text-white text-sm">${t.nome}</div>
+                        <div class="text-[10px] text-slate-500">${t.fonte}</div>
+                    </td>
+                    <td class="p-2 text-center font-mono ${total > 0 ? 'text-emerald-600' : 'text-slate-400'}">${total.toLocaleString('pt-BR')}</td>
+                    <td class="p-2 text-center text-xs">
+                        <input type="number" min="1" data-tab="${t.id}" class="cfgTabOrdem input-modern w-16 text-center" value="${ativa ? cfg.prioridade.indexOf(t.id) + 1 : ''}">
+                    </td>
+                </tr>`;
+            }).join('');
+
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-database mr-2 text-emerald-600"></i>Tabelas de Preço</h3>
+                            <p class="text-xs text-slate-500 mt-0.5">Habilitar / priorizar / regional + fallback IA</p>
+                        </div>
+                        <button onclick="document.getElementById('cfgTabelasModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div>
+                            <h4 class="text-sm font-bold dark:text-white mb-2">Tabelas habilitadas (ordem = prioridade)</h4>
+                            <table class="w-full text-sm">
+                                <thead class="text-xs text-slate-500 uppercase">
+                                    <tr><th class="p-2">Ativa</th><th class="p-2 text-left">Tabela</th><th class="p-2 text-center">Itens</th><th class="p-2 text-center">Ordem</th></tr>
+                                </thead>
+                                <tbody>${linhasTabelas}</tbody>
+                            </table>
+                            <p class="text-[10px] text-slate-500 mt-2"><strong>Itens=0</strong>: a tabela ainda não foi importada. Use a tela SINAPI para subir XLSX. Demais tabelas exigem backend ou import manual.</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-xs font-semibold dark:text-slate-300 block mb-1">Estado / Região</label>
+                                <select id="cfgTabEstado" class="input-modern w-full">
+                                    ${['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map(uf =>
+                                        `<option value="${uf}" ${cfg.estadoRegional === uf ? 'selected' : ''}>${uf}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold dark:text-slate-300 block mb-1">Mês de referência</label>
+                                <input id="cfgTabMes" type="month" class="input-modern w-full" value="${cfg.mesReferencia}">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-xs font-semibold dark:text-slate-300 block mb-1">Limiar de score (0-1)</label>
+                                <input id="cfgTabLimiar" type="number" min="0" max="1" step="0.05" class="input-modern w-full" value="${cfg.limiarScore}">
+                                <p class="text-[10px] text-slate-400 mt-1">Abaixo disso, vai pra IA</p>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold dark:text-slate-300 block mb-1">Máx. candidatos</label>
+                                <input id="cfgTabMax" type="number" min="1" max="20" class="input-modern w-full" value="${cfg.maxCandidatos}">
+                            </div>
+                        </div>
+
+                        <label class="flex items-center gap-2 text-sm cursor-pointer p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
+                            <input id="cfgTabFallbackIA" type="checkbox" ${cfg.fallbackIA ? 'checked' : ''}>
+                            <span class="dark:text-white"><strong>Fallback IA:</strong> quando nenhuma tabela bate, gera composição própria via Groq</span>
+                        </label>
+
+                        <div class="bg-blue-50 dark:bg-blue-900/20 border-l-3 border-blue-500 p-3 text-xs text-blue-800 dark:text-blue-200">
+                            <strong>Como testar:</strong> abra o console (F12) e rode:<br>
+                            <code class="font-mono">buscarServicoEmTodasTabelas('alvenaria bloco ceramico 14cm')</code><br>
+                            <code class="font-mono">await resolverItemOrcamento('Pintura latex acrilica fosca 2 demaos', 50)</code>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
+                        <button onclick="document.getElementById('cfgTabelasModal').remove()" class="flex-1 bg-slate-200 dark:bg-slate-600 py-2 rounded-lg font-bold text-sm dark:text-white">Cancelar</button>
+                        <button id="cfgTabSalvar" class="flex-1 bg-emerald-500 text-white py-2 rounded-lg font-bold text-sm hover:bg-emerald-600"><i class="fas fa-save mr-1"></i>Salvar</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+
+            document.getElementById('cfgTabSalvar').onclick = () => {
+                const novaPrioridade = [];
+                tabelas.forEach(t => {
+                    const chk = modal.querySelector(`.cfgTabAtiva[data-tab="${t.id}"]`);
+                    const ord = modal.querySelector(`.cfgTabOrdem[data-tab="${t.id}"]`);
+                    if (chk?.checked) {
+                        novaPrioridade.push({ id: t.id, ordem: parseInt(ord.value) || 999 });
+                    }
+                });
+                novaPrioridade.sort((a, b) => a.ordem - b.ordem);
+                cfg.prioridade = novaPrioridade.map(x => x.id);
+                cfg.estadoRegional = document.getElementById('cfgTabEstado').value;
+                cfg.mesReferencia = document.getElementById('cfgTabMes').value;
+                cfg.limiarScore = parseFloat(document.getElementById('cfgTabLimiar').value) || 0.35;
+                cfg.maxCandidatos = parseInt(document.getElementById('cfgTabMax').value) || 5;
+                cfg.fallbackIA = document.getElementById('cfgTabFallbackIA').checked;
+                db.config.tabelasPrecoConfig = cfg;
+                if (typeof saveData === 'function') saveData();
+                modal.remove();
+                if (typeof toast === 'function') toast('Configuração de tabelas salva', 'success');
+            };
+        };
+
+        // sincronizarSINAPI(): se o sinapi-fetcher.js está rodando (em geral
+        // localhost:3040), baixa/cacheia a planilha SINAPI do mês/UF da config
+        // e popula db.sinapi. Sem o backend, mostra instruções.
+        window.sincronizarSINAPI = async function() {
+            const cfg = _getTabelasCfg();
+            const baseUrl = (db.config?.sinapiFetcherUrl || 'http://localhost:3040').replace(/\/$/, '');
+            const mes = cfg.mesReferencia;
+            const uf = cfg.estadoRegional;
+            if (typeof toast === 'function') toast('Solicitando SINAPI ' + uf + ' ' + mes + '...', 'info');
+            try {
+                // tenta cache primeiro
+                let res = await fetch(baseUrl + '/sinapi/dados?mes=' + mes + '&uf=' + uf + '&tipo=composicoes');
+                if (res.status === 404) {
+                    if (typeof toast === 'function') toast('Não está em cache, baixando do site da CAIXA (pode demorar 30-60s)...', 'info');
+                    res = await fetch(baseUrl + '/sinapi/baixar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mes, uf, tipo: 'composicoes' })
+                    });
+                    if (!res.ok) throw new Error('Backend retornou ' + res.status);
+                    res = await fetch(baseUrl + '/sinapi/dados?mes=' + mes + '&uf=' + uf + '&tipo=composicoes');
+                }
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const json = await res.json();
+                if (!json.dados || !Array.isArray(json.dados)) throw new Error('formato inesperado');
+                db.sinapi = json.dados;
+                if (typeof saveData === 'function') saveData();
+                if (typeof toast === 'function') toast('SINAPI atualizado: ' + json.dados.length + ' composições (' + uf + ' ' + mes + ')', 'success');
+            } catch (err) {
+                console.error('[SINAPI fetcher]', err);
+                if (typeof toast === 'function') toast('Backend SINAPI indisponível. Rode `node sinapi-fetcher.js` ou importe XLSX manualmente.', 'error');
+            }
+        };
+
+        // aprimorarOrcamentoTemp(): pega window.iaOrcamentoTemp.itens (geralmente
+        // criado por gerarOrcamentoIA), passa cada item por resolverItemOrcamento
+        // pra substituir custos genéricos por valores reais das tabelas
+        // configuradas. Atualiza in-place + re-renderiza se a função existir.
+        window.aprimorarOrcamentoTemp = async function() {
+            if (!window.iaOrcamentoTemp || !Array.isArray(window.iaOrcamentoTemp.itens) || window.iaOrcamentoTemp.itens.length === 0) {
+                if (typeof toast === 'function') toast('Gere um orçamento via IA primeiro', 'warning');
+                return;
+            }
+            const itens = window.iaOrcamentoTemp.itens;
+            if (typeof toast === 'function') toast('Aprimorando ' + itens.length + ' itens com tabelas + IA...', 'info');
+
+            const stats = { propria: 0, sinapi: 0, sicro: 0, seinfra: 0, sbc: 0, orse: 0, ia: 0, manual: 0, mantido: 0 };
+            for (let i = 0; i < itens.length; i++) {
+                const it = itens[i];
+                const desc = it.descricao || it.servico || it.nome || '';
+                const qtd = parseFloat(it.qtd || it.quantidade) || 1;
+                const resolvido = await window.resolverItemOrcamento(desc, qtd);
+                if (resolvido.origem === 'manual' || resolvido.custoUnit === 0) {
+                    stats.mantido++;
+                    continue;
+                }
+                it.unit = resolvido.custoUnit;
+                it.valorUnitario = resolvido.custoUnit;
+                it.total = resolvido.valorTotal;
+                it.unidade = resolvido.unidade;
+                it.origem = resolvido.origem;
+                it.origemCodigo = resolvido.origemCodigo;
+                it.origemDesc = resolvido.origemDesc;
+                stats[resolvido.origem] = (stats[resolvido.origem] || 0) + 1;
+            }
+            window.iaOrcamentoTemp.total = +itens.reduce((s, it) => s + (parseFloat(it.total) || 0), 0).toFixed(2);
+            if (typeof renderOrcamentoIA === 'function') renderOrcamentoIA();
+
+            const linhas = Object.entries(stats).filter(([_, v]) => v > 0).map(([k, v]) => k.toUpperCase() + ': ' + v).join(' | ');
+            if (typeof toast === 'function') toast('Aprimorado — ' + linhas, 'success');
+            return stats;
+        };
 
         // ===== Stubs (módulos com UI pronta mas lógica pendente) =====
         stub('bimStartAR',                  'AR (Realidade Aumentada)');
