@@ -29166,6 +29166,9 @@ Ex: Prestação de Serviço Engenharia - OBRA: [NOME DA OBRA] RQ X.X.X/A - R0X D
                             <button onclick="sincronizarSINAPI()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all" title="Baixar/atualizar SINAPI do site da CAIXA (precisa rodar sinapi-fetcher.js)">
                                 <i class="fas fa-cloud-download-alt"></i>Atualizar SINAPI
                             </button>
+                            <button onclick="abrirRevisaoComposicoesIA()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all" title="Revisar composições geradas pela IA">
+                                <i class="fas fa-robot"></i>Revisar IA
+                            </button>
                             <button onclick="importarEscopoInteligente()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all">
                                 <i class="fas fa-magic"></i>Importar Escopo
                             </button>
@@ -69397,6 +69400,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
                         <div class="flex items-center justify-center gap-1">
                             <button onclick="editOrcamentoSinapi('${orc.id}')" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg" title="Editar"><i class="fas fa-edit"></i></button>
                             <button onclick="duplicarOrcamento('${orc.id}')" class="p-1.5 text-purple-500 hover:bg-purple-50 rounded-lg" title="Duplicar"><i class="fas fa-copy"></i></button>
+                            <button onclick="aprimorarOrcamento('${orc.id}')" class="p-1.5 text-cyan-500 hover:bg-cyan-50 rounded-lg" title="Aprimorar com Tabelas + IA"><i class="fas fa-wand-magic-sparkles"></i></button>
                             <button onclick="exportarOrcamentoCliente('${orc.id}')" class="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg" title="PDF para cliente"><i class="fas fa-file-pdf"></i></button>
                             <button onclick="gerarPropostaDoOrcamento('${orc.id}')" class="p-1.5 text-amber-500 hover:bg-amber-50 rounded-lg" title="Proposta detalhada"><i class="fas fa-file-contract"></i></button>
                             <button onclick="printOrcamentoById('${orc.id}')" class="p-1.5 text-green-500 hover:bg-green-50 rounded-lg" title="Imprimir"><i class="fas fa-print"></i></button>
@@ -128419,6 +128423,142 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
                 modal.remove();
                 if (typeof toast === 'function') toast('Configuração de tabelas salva', 'success');
             };
+        };
+
+        // aprimorarOrcamento(id): roda o motor inteligente em todos os itens
+        // de um orçamento JÁ SALVO em db.orcamentosDetalhados, atualizando custos
+        // e marcando a origem (SINAPI, IA, etc.) por item. Pede confirmação e
+        // mostra um diff antes/depois sumarizado.
+        window.aprimorarOrcamento = async function(id) {
+            const orc = (db.orcamentosDetalhados || []).find(o => String(o.id) === String(id));
+            if (!orc) { if (typeof toast === 'function') toast('Orçamento não encontrado', 'error'); return; }
+            const itens = Array.isArray(orc.itens) ? orc.itens : [];
+            if (itens.length === 0) { if (typeof toast === 'function') toast('Orçamento sem itens', 'warning'); return; }
+            if (typeof confirm === 'function' && !confirm(
+                'Aprimorar ' + itens.length + ' itens do orçamento "' + (orc.codigo || orc.id) + '" usando tabelas configuradas + IA?\n\n' +
+                'Custos serão atualizados pelo melhor match. Itens sem match nas tabelas vão pra IA (se ativada).'
+            )) return;
+
+            if (typeof toast === 'function') toast('Aprimorando ' + itens.length + ' itens...', 'info');
+            const totalAntes = itens.reduce((s, it) => s + (parseFloat(it.valorTotal || it.total) || 0), 0);
+            const stats = { propria: 0, sinapi: 0, sicro: 0, seinfra: 0, sbc: 0, orse: 0, ia: 0, manual: 0, mantido: 0 };
+
+            for (let i = 0; i < itens.length; i++) {
+                const it = itens[i];
+                const desc = it.descricao || it.servico || it.nome || '';
+                const qtd = parseFloat(it.quantidade || it.qtd) || 1;
+                if (!desc) { stats.mantido++; continue; }
+                const r = await window.resolverItemOrcamento(desc, qtd);
+                if (r.origem === 'manual' || r.custoUnit === 0) { stats.mantido++; continue; }
+                it.custoUnitario = r.custoUnit;
+                it.valorTotal = r.valorTotal;
+                it.unidade = r.unidade || it.unidade;
+                it.origem = r.origem;
+                it.origemCodigo = r.origemCodigo;
+                it.origemDesc = r.origemDesc;
+                stats[r.origem] = (stats[r.origem] || 0) + 1;
+            }
+
+            const totalDepois = itens.reduce((s, it) => s + (parseFloat(it.valorTotal) || 0), 0);
+            orc.totalSemBDI = +totalDepois.toFixed(2);
+            // mantém BDI configurado se houver; senão 25% default
+            const bdiPct = orc.bdiPct || 25;
+            orc.totalComBDI = +(totalDepois * (1 + bdiPct / 100)).toFixed(2);
+            orc.aprimoradoEm = new Date().toISOString();
+            orc.aprimoramentoStats = stats;
+
+            if (typeof saveData === 'function') saveData();
+            if (typeof renderOrcamentosUnificado === 'function') renderOrcamentosUnificado();
+
+            const delta = totalDepois - totalAntes;
+            const fmt = v => 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const linhas = Object.entries(stats).filter(([_, v]) => v > 0).map(([k, v]) => k.toUpperCase() + ': ' + v).join(' | ');
+            if (typeof toast === 'function') {
+                toast('Aprimorado! ' + fmt(totalAntes) + ' → ' + fmt(totalDepois) + ' (Δ ' + (delta >= 0 ? '+' : '') + fmt(delta) + ') | ' + linhas, 'success', { duration: 8000 });
+            }
+        };
+
+        // listarComposicoesIAParaRevisao(): retorna composições geradas por IA
+        // que ainda não foram revisadas manualmente pelo usuário. Útil pra
+        // controle de qualidade — preços de IA têm que ser auditados.
+        window.listarComposicoesIAParaRevisao = function() {
+            return (db.composicoesProprias || []).filter(c => c.origem === 'ia' && !c.revisada);
+        };
+
+        // abrirRevisaoComposicoesIA: modal listando composições geradas por IA
+        // pendentes de revisão. Cada uma permite marcar como revisada ou abrir
+        // pra edição inline (descrição, custo unitário ajustável).
+        window.abrirRevisaoComposicoesIA = function() {
+            const pendentes = window.listarComposicoesIAParaRevisao();
+            document.getElementById('iaRevisaoModal')?.remove();
+            const modal = document.createElement('div');
+            modal.id = 'iaRevisaoModal';
+            modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4';
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+            const linhas = pendentes.length === 0
+                ? '<tr><td colspan="6" class="p-8 text-center text-slate-500">Nenhuma composição IA pendente. <i class="fas fa-check-circle text-green-500 ml-2"></i></td></tr>'
+                : pendentes.map(c => `
+                    <tr class="border-b dark:border-slate-700 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10">
+                        <td class="p-2 font-mono text-xs text-slate-500">${c.codigo}</td>
+                        <td class="p-2"><div class="font-medium text-sm dark:text-white">${c.descricao}</div><div class="text-[10px] text-slate-400">${c.iaRegiao || ''} • ${(c.insumos || []).length} insumos</div></td>
+                        <td class="p-2 text-center text-xs text-slate-500">${c.unidade || 'un'}</td>
+                        <td class="p-2 text-right font-bold text-cyan-700 dark:text-cyan-300">R$ ${(parseFloat(c.custoTotal) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                        <td class="p-2 text-center text-xs text-slate-400">${c.dataCriacao ? new Date(c.dataCriacao).toLocaleDateString('pt-BR') : '-'}</td>
+                        <td class="p-2 text-center">
+                            <button onclick="if(typeof exportarComposicaoPDF==='function')exportarComposicaoPDF('${c.codigo}')" class="p-1 text-blue-500 hover:bg-blue-50 rounded" title="Ver detalhes"><i class="fas fa-eye"></i></button>
+                            <button onclick="marcarComposicaoRevisada('${c.id}')" class="p-1 text-green-500 hover:bg-green-50 rounded ml-1" title="Marcar como revisada"><i class="fas fa-check"></i></button>
+                            <button onclick="excluirComposicaoIA('${c.id}')" class="p-1 text-red-500 hover:bg-red-50 rounded ml-1" title="Excluir"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>`).join('');
+
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-3xl shadow-2xl max-h-[92vh] overflow-y-auto">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-robot mr-2 text-cyan-600"></i>Revisão de Composições IA</h3>
+                            <p class="text-xs text-slate-500 mt-0.5">${pendentes.length} composição(ões) gerada(s) pela IA aguardando auditoria — preços podem precisar de ajuste</p>
+                        </div>
+                        <button onclick="document.getElementById('iaRevisaoModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="p-5">
+                        <table class="w-full text-sm">
+                            <thead class="text-xs text-slate-500 uppercase">
+                                <tr class="border-b dark:border-slate-700">
+                                    <th class="p-2 text-left">Código</th>
+                                    <th class="p-2 text-left">Descrição</th>
+                                    <th class="p-2 text-center">Un.</th>
+                                    <th class="p-2 text-right">Custo</th>
+                                    <th class="p-2 text-center">Criada em</th>
+                                    <th class="p-2 text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>${linhas}</tbody>
+                        </table>
+                        <div class="bg-amber-50 dark:bg-amber-900/20 border-l-3 border-amber-500 p-3 text-xs text-amber-800 dark:text-amber-200 mt-4">
+                            <strong>Importante:</strong> a IA gera composições baseadas em conhecimento geral. Sempre confirme se os preços e coeficientes batem com a realidade da sua região antes de usar em orçamentos finais para cliente.
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+        };
+
+        // marcarComposicaoRevisada/excluirComposicaoIA — helpers do modal acima
+        window.marcarComposicaoRevisada = function(id) {
+            const c = (db.composicoesProprias || []).find(x => x.id === id);
+            if (!c) return;
+            c.revisada = true;
+            c.revisadaEm = new Date().toISOString();
+            if (typeof saveData === 'function') saveData();
+            if (typeof toast === 'function') toast('Composição marcada como revisada', 'success');
+            window.abrirRevisaoComposicoesIA();
+        };
+        window.excluirComposicaoIA = function(id) {
+            if (typeof confirm === 'function' && !confirm('Excluir esta composição IA?')) return;
+            db.composicoesProprias = (db.composicoesProprias || []).filter(c => c.id !== id);
+            if (typeof saveData === 'function') saveData();
+            if (typeof toast === 'function') toast('Composição excluída', 'info');
+            window.abrirRevisaoComposicoesIA();
         };
 
         // sincronizarSINAPI(): se o sinapi-fetcher.js está rodando (em geral
