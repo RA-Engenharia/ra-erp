@@ -19589,7 +19589,242 @@
 
         /* Texto monoespaçado em códigos/CNPJ */
         .font-mono { font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace !important; }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           V72.54.1 — CORREÇÕES VISUAIS PÓS-AUDITORIA
+           Fixes baseados em screenshots reais das views renderizadas:
+           ═══════════════════════════════════════════════════════════════════ */
+
+        /* 1. INPUTS COM FUNDO ESCURO — o baseline força #1e293b em .view-section
+           input[type="..."]. Para vencer essa especificidade (4) + !important,
+           uso seletor encadeado com html:not(.dark) e múltiplas classes. */
+        html:not(.dark) body .view-section input[type="text"],
+        html:not(.dark) body .view-section input[type="search"],
+        html:not(.dark) body .view-section input[type="date"],
+        html:not(.dark) body .view-section input[type="month"],
+        html:not(.dark) body .view-section input[type="number"],
+        html:not(.dark) body .view-section input[type="email"],
+        html:not(.dark) body .view-section input[type="password"],
+        html:not(.dark) body .view-section select.input-modern,
+        html:not(.dark) body .view-section textarea,
+        html:not(.dark) body input.input-modern,
+        html:not(.dark) body textarea.input-modern,
+        html:not(.dark) body select.input-modern {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+        html:not(.dark) body .view-section input::placeholder,
+        html:not(.dark) body .view-section textarea::placeholder,
+        html:not(.dark) body input.input-modern::placeholder,
+        html:not(.dark) body textarea.input-modern::placeholder {
+            color: #94a3b8 !important;
+            opacity: 1 !important;
+        }
+        html:not(.dark) body .view-section input:focus,
+        html:not(.dark) body .view-section textarea:focus,
+        html:not(.dark) body input.input-modern:focus,
+        html:not(.dark) body textarea.input-modern:focus,
+        html:not(.dark) body select.input-modern:focus {
+            border-color: var(--mod-primary) !important;
+            box-shadow: var(--mod-focus-ring) !important;
+            outline: none !important;
+        }
+
+        /* 2. SIDEBAR — largura mínima maior pra textos caberem */
+        #sidebar:not(.sidebar-collapsed) {
+            min-width: 248px !important;
+            width: 248px !important;
+        }
+        #sidebar .sidebar-item span,
+        #sidebar button {
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+        }
+
+        /* 3. HEADER PREMIUM (gradiente verde) → slate elegante
+              Especificidade > linha 19416 do meu ra-modern-theme */
+        html body [class*="bg-gradient-to-r"][class*="from-emerald-600"][class*="via-green-600"][class*="to-teal-600"],
+        html body [class*="bg-gradient-to-r"][class*="from-emerald-600"][class*="to-teal-600"],
+        html body div[class*="from-emerald-600"][class*="via-green-600"][class*="to-teal-600"] {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+            background-image: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
+            border: 1px solid rgba(148, 163, 184, 0.15) !important;
+            box-shadow: var(--mod-shadow) !important;
+        }
+        /* Botões dentro do header escuro */
+        [class*="from-emerald-600"] button[class*="bg-white"][class*="text-emerald"],
+        [class*="from-emerald-600"] label[class*="bg-emerald-500"] {
+            background: var(--mod-accent) !important;
+            color: #fff !important;
+        }
+        [class*="from-emerald-600"] button[class*="bg-white\\/20"],
+        [class*="from-emerald-600"] label[class*="bg-white\\/20"] {
+            background: rgba(255, 255, 255, 0.10) !important;
+            color: #fff !important;
+        }
+        /* "Bolinhas" decorativas no header — remover */
+        [class*="from-emerald-600"] [class*="blur-2xl"],
+        [class*="from-emerald-600"] [class*="blur-xl"] {
+            display: none !important;
+        }
+
+        /* 6. CABEÇALHOS DE TABELA com bg colorido → cinza-azul moderno
+              Pega slate-800/900 + qualquer gradient com from-* uppercase typical */
+        table thead,
+        html body table thead[class*="bg-slate-800"],
+        html body table thead[class*="bg-slate-900"],
+        html body table thead[class*="bg-gradient-to-r"],
+        html body table thead[class*="bg-gradient-to-br"],
+        html body table thead tr {
+            background: #f8fafc !important;
+            background-image: none !important;
+            border-bottom: 1px solid var(--mod-border) !important;
+        }
+        html.dark body table thead tr {
+            background: #0f172a !important;
+            background-image: none !important;
+        }
+        html body .view-section table th,
+        html body table thead th,
+        html body table thead tr th {
+            background: transparent !important;
+            background-color: transparent !important;
+            color: #64748b !important;
+            font-weight: 600 !important;
+            font-size: 11px !important;
+            letter-spacing: 0.04em !important;
+            text-transform: uppercase !important;
+            padding: 10px 14px !important;
+            border-bottom: 0 !important;
+        }
+        html.dark body .view-section table th,
+        html.dark body table thead th {
+            color: #94a3b8 !important;
+        }
+        html.dark body table thead,
+        html.dark body table thead[class*="bg-slate-800"],
+        html.dark body table thead[class*="bg-gradient-to-r"] {
+            background: #0f172a !important;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.10) !important;
+        }
+        html.dark body table thead th { color: #94a3b8 !important; }
+
+        /* 5. TOGGLES decorativos PRO/BIM/Frota — tirar visual de switch */
+        #sidebar [class*="rounded-full"][class*="bg-emerald"][class*="px-2"],
+        #sidebar [class*="rounded-full"][class*="bg-amber"][class*="px-2"] {
+            border-radius: 4px !important;
+            font-size: 9px !important;
+            padding: 1px 5px !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.05em !important;
+        }
+
+        /* 7-8. CARDS DE KPI — Ícones menores, números mais hierárquicos */
+        .glass-panel .text-3xl.font-black,
+        .glass-panel .text-2xl.font-black {
+            font-size: 1.875rem !important;
+            font-weight: 800 !important;
+            line-height: 1 !important;
+            margin: 4px 0 !important;
+        }
+        .glass-panel [class*="w-12"][class*="h-12"][class*="rounded"],
+        .glass-panel [class*="w-10"][class*="h-10"][class*="rounded"] {
+            width: 40px !important;
+            height: 40px !important;
+        }
+        .glass-panel [class*="w-12"][class*="h-12"] i,
+        .glass-panel [class*="w-10"][class*="h-10"] i {
+            font-size: 16px !important;
+        }
+        /* KPI labels (uppercase) menos pesadas */
+        .glass-panel [class*="uppercase"][class*="text-xs"] {
+            font-weight: 600 !important;
+            letter-spacing: 0.06em !important;
+            color: var(--mod-text-muted) !important;
+            font-size: 11px !important;
+        }
+
+        /* 10. TOP BAR — corrigir gradientes que sobram */
+        nav [class*="bg-gradient-to-r"][class*="from-purple"],
+        header [class*="bg-gradient-to-r"][class*="from-purple"] {
+            background: transparent !important;
+        }
+
+        /* 11. CHIP "Salvo" no breadcrumb — separar visualmente */
+        nav [class*="bg-green"][class*="rounded-full"][class*="text-xs"]:has(i.fa-check),
+        [id*="autoSaveStatus"], [id*="syncStatus"] {
+            margin-left: 12px !important;
+        }
+
+        /* 12. EMPTY STATES mais elegantes */
+        .empty-state, [class*="empty-state"],
+        td[class*="text-center"][class*="text-slate-400"]:not(:empty),
+        td[class*="text-center"][class*="text-slate-500"]:not(:empty) {
+            font-size: 13px !important;
+            padding: 32px 16px !important;
+        }
+
+        /* PROTEÇÃO CONTRA "NaN" — quando aparecer R$ NaN, mostra R$ 0,00 */
+        /* (handled via JS abaixo) */
+
+        /* Reduz "glassmorphism" residual */
+        [class*="bg-white\\/10"]:not(button):not(.sidebar-item):not([class*="from-emerald"]):not([class*="hover\\:"]) {
+            background: rgba(255, 255, 255, 0.03) !important;
+        }
+
+        /* TAB ATIVA em abas — destaque limpo */
+        button[class*="bg-emerald-500"][class*="text-white"]:not([class*="hover"]) {
+            background: var(--mod-accent) !important;
+            color: #fff !important;
+        }
     </style>
+    <script>
+        // V72.54.1 — Patch: substitui "NaN" em renderizações por "0,00" + faz
+        // sweep periódico nos primeiros 10s pra pegar valores renderizados
+        // ANTES do mutation observer ligar.
+        (function() {
+            const sanitizar = (root) => {
+                if (!root) return;
+                const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+                let node, count = 0;
+                while ((node = walker.nextNode())) {
+                    if (node.nodeValue && /NaN/.test(node.nodeValue)) {
+                        node.nodeValue = node.nodeValue
+                            .replace(/R\$\s*NaN/g, 'R$ 0,00')
+                            .replace(/\bNaN\s*%/g, '0%')
+                            .replace(/\bNaN\b/g, '0');
+                        count++;
+                    }
+                }
+                return count;
+            };
+
+            // Sweep periódico (primeiros 10s, depois desliga)
+            let attempts = 0;
+            const sweepInterval = setInterval(() => {
+                attempts++;
+                if (document.body) sanitizar(document.body);
+                if (attempts >= 20) clearInterval(sweepInterval);
+            }, 500);
+
+            // Observer pra mudanças subsequentes
+            const observer = new MutationObserver(muts => {
+                muts.forEach(m => {
+                    m.addedNodes && m.addedNodes.forEach(n => {
+                        if (n.nodeType === 1 && n.textContent && n.textContent.includes('NaN')) {
+                            sanitizar(n);
+                        }
+                    });
+                });
+            });
+            const startObs = () => {
+                if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+            };
+            if (document.body) startObs(); else document.addEventListener('DOMContentLoaded', startObs);
+        })();
+    </script>
 
     </head>
 <body class="light flex h-screen overflow-hidden">
