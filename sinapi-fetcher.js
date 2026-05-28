@@ -260,7 +260,7 @@ const server = http.createServer(async (req, res) => {
     const route = url.pathname;
 
     try {
-        if (route === '/' || route === '/health') {
+        if (route === '/health') {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 ok: true, service: 'sinapi-fetcher v2',
@@ -449,6 +449,28 @@ const server = http.createServer(async (req, res) => {
             return;
         }
 
+        // ── SERVING ESTÁTICO: serve index.html e arquivos da pasta ──
+        // Permite acessar o ERP em http://localhost:3040/ (mesma origem do
+        // backend = sem problema de CORS). Só responde GET fora das rotas /api.
+        if (req.method === 'GET') {
+            const MIME = {
+                '.html': 'text/html; charset=utf-8', '.js': 'text/javascript',
+                '.css': 'text/css', '.json': 'application/json', '.png': 'image/png',
+                '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+                '.woff': 'font/woff', '.woff2': 'font/woff2'
+            };
+            let rel = decodeURIComponent(route);
+            if (rel === '/' ) rel = '/index.html';
+            // segurança: impede path traversal
+            const safePath = path.normalize(path.join(__dirname, rel));
+            if (safePath.startsWith(__dirname) && fs.existsSync(safePath) && fs.statSync(safePath).isFile()) {
+                const ext = path.extname(safePath).toLowerCase();
+                res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+                fs.createReadStream(safePath).pipe(res);
+                return;
+            }
+        }
+
         res.writeHead(404); res.end(JSON.stringify({ error: 'route_not_found' }));
     } catch (err) {
         res.writeHead(500); res.end(JSON.stringify({ error: err.message }));
@@ -457,19 +479,19 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
     console.log('═══════════════════════════════════════════════════════════════');
-    console.log(' SINAPI Fetcher v2 em http://localhost:' + PORT);
-    console.log(' Cache:', CACHE_DIR);
-    console.log(' Libs: xlsx ' + (XLSX ? '✓' : '✗ falta npm install xlsx'));
-    console.log('       adm-zip ' + (AdmZip ? '✓' : '✗ falta npm install adm-zip'));
+    console.log('  RA ENGENHARIA ERP — Servidor Local');
+    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('  Abra o sistema em:  http://localhost:' + PORT + '/');
     console.log('');
-    console.log(' Endpoints:');
-    console.log('   GET  /health');
-    console.log('   GET  /sinapi/listar-oficial    ← meses na CAIXA');
-    console.log('   POST /sinapi/baixar  {mes,uf}  ← baixa+descompacta+parseia');
-    console.log('   GET  /sinapi/dados?mes=YYYY-MM&uf=MG');
-    console.log('   POST /tabela/importar  {tabela, xlsxBase64}');
-    console.log('   GET  /tabela/dados?tabela=X&mes=Y&uf=Z');
+    console.log('  Backend SINAPI + Web na mesma porta (sem CORS).');
+    console.log('  Cache:', CACHE_DIR);
+    console.log('  Libs: xlsx ' + (XLSX ? '✓' : '✗ npm install xlsx') +
+                '  | adm-zip ' + (AdmZip ? '✓' : '✗ npm install adm-zip'));
     console.log('');
-    console.log(' Pressione Ctrl+C para parar');
+    console.log('  Endpoints API: /sinapi/listar-oficial, /sinapi/baixar,');
+    console.log('                 /sinapi/dados, /tabela/importar, /tabela/dados');
+    console.log('');
+    console.log('  Pode FECHAR esta janela quando terminar de usar o sistema.');
+    console.log('  (Ctrl+C para parar)');
     console.log('═══════════════════════════════════════════════════════════════');
 });

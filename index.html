@@ -129750,6 +129750,19 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
         };
         setTimeout(autoCarregar, 2500);
 
+        // V72.56: Auto-detecta backend na MESMA origem.
+        // Quando o sistema é servido pelo próprio sinapi-fetcher (ex.: aberto via
+        // http://localhost:3040/ pelo Iniciar-RA-ERP.bat), usa a própria origem
+        // como URL do backend — assim "Atualizar SINAPI" funciona sem configurar
+        // nada e sem problema de CORS (mesma origem).
+        try {
+            if (location.protocol === 'http:' && location.port && !(db.config && db.config.sinapiFetcherUrl)) {
+                db.config = db.config || {};
+                db.config.sinapiFetcherUrl = location.origin;
+                console.log('[V72.56] Backend auto-detectado na mesma origem:', location.origin);
+            }
+        } catch (e) {}
+
         // ════════════════════════════════════════════════════════════════════════
         // V72.55.1 — Tabelas grandes (SINAPI 8000+) só no IndexedDB, NÃO no localStorage
         // O localStorage tem ~5MB; a base SINAPI completa estoura a quota e
