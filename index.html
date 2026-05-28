@@ -64484,10 +64484,9 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
      */
     function salvarSINAPINoLocalStorage() {
         try {
-            // Salvar configuração
+            // Configuração é leve — sempre no localStorage
             localStorage.setItem('ra_erp_sinapi_config', JSON.stringify(SINAPI_CONFIG || {}));
-            
-            // Salvar dados compactados (apenas essencial)
+
             const dadosCache = {
                 insumos_sd: (SINAPI_DB?.insumos_sd || []).slice(0, 50000),
                 insumos_cd: (SINAPI_DB?.insumos_cd || []).slice(0, 50000),
@@ -64496,17 +64495,18 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
                 composicoes_analiticas: (SINAPI_DB?.composicoes_analiticas || []).slice(0, 20000),
                 percentual_mo_sd: SINAPI_DB?.percentual_mo_sd || []
             };
-            
-            localStorage.setItem('SINAPI_DB_CACHE', JSON.stringify(dadosCache));
-            console.log('✅ Dados SINAPI salvos no localStorage');
-        } catch(e) {
-            console.warn('⚠️ Não foi possível salvar SINAPI no localStorage:', e.message);
-            // Tentar salvar apenas o essencial
-            try {
-                localStorage.setItem('ra_erp_sinapi_config', JSON.stringify(SINAPI_CONFIG || {}));
-            } catch(e2) {
-                console.error('Erro crítico ao salvar configuração SINAPI');
+
+            // Base SINAPI completa é grande → IndexedDB (V72.55.1), não localStorage
+            const totalItens = dadosCache.insumos_sd.length + dadosCache.composicoes_sd.length;
+            if (typeof HybridStorage !== 'undefined' && HybridStorage.isReady && totalItens > 1000) {
+                HybridStorage.set('SINAPI_DB_CACHE', dadosCache)
+                    .then(() => console.log('✅ SINAPI salvo no IndexedDB:', totalItens, 'itens'))
+                    .catch(() => {});
+            } else {
+                try { localStorage.setItem('SINAPI_DB_CACHE', JSON.stringify(dadosCache)); } catch(e) { /* base grande, já no IDB */ }
             }
+        } catch(e) {
+            try { localStorage.setItem('ra_erp_sinapi_config', JSON.stringify(SINAPI_CONFIG || {})); } catch(e2) {}
         }
     }
     
@@ -92384,15 +92384,20 @@ Seja realista com os preços atuais do mercado brasileiro (2024/2025).`;
                 });
             }
             
-            // 4. Salvar no cache localStorage (para persistir entre sessões)
+            // 4. Persistir SINAPI_BASE — usa IndexedDB (HybridStorage) pra não
+            //    estourar a quota do localStorage com bases grandes (V72.55.1)
             try {
-                // Limitar tamanho para não estourar localStorage
-                const dadosCache = SINAPI_BASE.slice(0, 15000);
-                localStorage.setItem('SINAPI_BASE_CACHE', JSON.stringify(dadosCache));
-                console.log('✅ SINAPI_BASE sincronizado:', SINAPI_BASE.length, 'itens');
-            } catch(e) {
-                console.warn('Não foi possível salvar cache SINAPI_BASE:', e.message);
-            }
+                if (typeof HybridStorage !== 'undefined' && HybridStorage.isReady) {
+                    HybridStorage.set('SINAPI_BASE_CACHE', SINAPI_BASE.slice(0, 15000))
+                        .then(() => console.log('✅ SINAPI_BASE no IndexedDB:', SINAPI_BASE.length, 'itens'))
+                        .catch(() => {});
+                } else {
+                    // fallback: tenta localStorage só se base pequena
+                    if (SINAPI_BASE.length <= 2000) {
+                        localStorage.setItem('SINAPI_BASE_CACHE', JSON.stringify(SINAPI_BASE));
+                    }
+                }
+            } catch(e) { /* silencioso — base já está em db.sinapi/IndexedDB */ }
             
             // 5. Atualizar contadores na interface
             atualizarContadoresSINAPIBase();
