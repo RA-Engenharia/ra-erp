@@ -129212,6 +129212,7 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
                         <div>
                             <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-database mr-2 text-emerald-600"></i>Tabelas de Preço</h3>
                             <p class="text-xs text-slate-500 mt-0.5">Habilitar / priorizar / regional + fallback IA</p>
+                            ${(db.config && db.config.sinapiMesCarregado) ? `<p class="text-xs mt-1"><span class="inline-flex items-center gap-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full font-semibold"><i class="fas fa-circle-check"></i>SINAPI ${db.config.sinapiMesCarregado} · ${(db.sinapi||[]).length.toLocaleString('pt-BR')} composições</span></p>` : `<p class="text-xs mt-1 text-slate-400"><i class="fas fa-circle-info mr-1"></i>SINAPI: ${(db.sinapi||[]).length} itens (curados — clique "Atualizar SINAPI" p/ base oficial)</p>`}
                         </div>
                         <button onclick="document.getElementById('cfgTabelasModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
                     </div>
@@ -129265,8 +129266,9 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
                         </div>
                     </div>
                     <div class="flex gap-2 p-4 border-t border-slate-200 dark:border-slate-700">
-                        <button onclick="document.getElementById('cfgTabelasModal').remove()" class="flex-1 bg-slate-200 dark:bg-slate-600 py-2 rounded-lg font-bold text-sm dark:text-white">Cancelar</button>
-                        <button id="cfgTabSalvar" class="flex-1 bg-emerald-500 text-white py-2 rounded-lg font-bold text-sm hover:bg-emerald-600"><i class="fas fa-save mr-1"></i>Salvar</button>
+                        <button onclick="document.getElementById('cfgTabelasModal').remove()" class="bg-slate-200 dark:bg-slate-600 px-4 py-2 rounded-lg font-bold text-sm dark:text-white">Fechar</button>
+                        <button onclick="if(window.verificarAtualizacaoSINAPIAuto)verificarAtualizacaoSINAPIAuto({manual:true,forcar:true})" class="flex-1 bg-blue-500 text-white py-2 rounded-lg font-bold text-sm hover:bg-blue-600" title="Baixa a SINAPI mais recente da CAIXA agora"><i class="fas fa-cloud-download-alt mr-1"></i>Atualizar SINAPI agora</button>
+                        <button id="cfgTabSalvar" class="flex-1 bg-emerald-500 text-white py-2 rounded-lg font-bold text-sm hover:bg-emerald-600"><i class="fas fa-save mr-1"></i>Salvar config</button>
                     </div>
                 </div>`;
             document.body.appendChild(modal);
