@@ -19769,7 +19769,137 @@
         /* PROTEÇÃO CONTRA "NaN" — quando aparecer R$ NaN, mostra R$ 0,00 */
         /* (handled via JS abaixo) */
 
-        /* Reduz "glassmorphism" residual */
+        /* ═══════════════════════════════════════════════════════════════════
+           V72.54.2 — Continuação de polimento visual
+           ═══════════════════════════════════════════════════════════════════ */
+
+        /* Header escuro do Orçamento — KPI chips com contraste correto */
+        html body [class*="from-emerald-600"][class*="to-teal-600"] .bg-white\/10,
+        html body [class*="from-emerald-600"][class*="via-green-600"] [class*="bg-white\\/10"],
+        html body div[class*="from-emerald-600"] [class*="bg-white\\/10"] {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border: 1px solid rgba(255, 255, 255, 0.10) !important;
+        }
+        /* Labels (opacity-70) ficam mais visíveis */
+        html body [class*="from-emerald-600"] [class*="opacity-70"],
+        html body [class*="from-emerald-600"] [class*="opacity-80"] {
+            opacity: 0.85 !important;
+        }
+        /* Texto branco no header escuro */
+        html body [class*="from-emerald-600"][class*="to-teal-600"] h3,
+        html body [class*="from-emerald-600"][class*="to-teal-600"] p,
+        html body [class*="from-emerald-600"][class*="to-teal-600"] .font-black {
+            color: #f8fafc !important;
+        }
+
+        /* Header buttons — ajusta flex/gap pra não amontoar */
+        html body [class*="from-emerald-600"] > div.relative > div.flex {
+            gap: 0.5rem !important;
+            row-gap: 0.5rem !important;
+        }
+        html body [class*="from-emerald-600"] button,
+        html body [class*="from-emerald-600"] label[class*="cursor-pointer"] {
+            padding: 8px 14px !important;
+            font-size: 13px !important;
+            white-space: nowrap !important;
+        }
+
+        /* Chip "Salvo" no breadcrumb — separar visualmente */
+        nav [id="autoSaveStatus"], nav #autoSaveStatus, header #autoSaveStatus,
+        #header #autoSaveStatus,
+        [id="autoSaveStatus"], [id="syncStatus"] {
+            margin-left: 12px !important;
+            margin-right: 8px !important;
+        }
+
+        /* Top bar — limpa o gradient roxo de fallback */
+        nav, #header, header {
+            background-image: none !important;
+        }
+
+        /* Sidebar: melhor contraste no item ativo + transições */
+        #sidebar .sidebar-item {
+            font-size: 13px !important;
+            padding: 8px 12px !important;
+            transition: background 0.12s, color 0.12s !important;
+        }
+        #sidebar .sidebar-item i {
+            min-width: 18px !important;
+            font-size: 14px !important;
+        }
+
+        /* Cabeçalho de categoria na sidebar */
+        #sidebar [class*="text-xs"][class*="uppercase"] {
+            color: rgba(148, 163, 184, 0.7) !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.08em !important;
+            font-size: 10px !important;
+            padding: 12px 12px 6px 12px !important;
+        }
+
+        /* Cards do dashboard — semantização: KPIs positivos verde, negativos vermelho */
+        /* (mantém o que já tem se ja é semântico; ajusta cores agressivas) */
+        .glass-panel [class*="border-l-4"][class*="border-amber-500"] { border-left-color: #d97706 !important; }
+        .glass-panel [class*="border-l-4"][class*="border-blue-500"]  { border-left-color: #2563eb !important; }
+        .glass-panel [class*="border-l-4"][class*="border-green-500"] { border-left-color: #059669 !important; }
+        .glass-panel [class*="border-l-4"][class*="border-red-500"]   { border-left-color: #dc2626 !important; }
+
+        /* Empty state moderno — quando aparecer "Nenhum X encontrado" sozinho na tabela */
+        td[colspan]:only-child {
+            padding: 48px 20px !important;
+            color: var(--mod-text-muted) !important;
+            font-size: 13px !important;
+        }
+
+        /* Suaviza textos coloridos extremos */
+        .text-rose-400 { color: #fda4af !important; }
+        .text-emerald-400 { color: #6ee7b7 !important; }
+
+        /* Botões "btn-primary", "btn-success", etc do baseline padronizados */
+        .btn-primary {
+            background: var(--mod-primary) !important;
+            color: #fff !important;
+            border: none !important;
+        }
+        .btn-primary:hover { background: var(--mod-primary-hover) !important; }
+        .btn-success {
+            background: var(--mod-accent) !important;
+            color: #fff !important;
+            border: none !important;
+        }
+        .btn-success:hover { background: #047857 !important; }
+        .btn-secondary {
+            background: var(--mod-card) !important;
+            color: var(--mod-text) !important;
+            border: 1px solid var(--mod-border-strong) !important;
+        }
+        .btn-secondary:hover { background: var(--mod-hover) !important; }
+        .btn-warning {
+            background: #f59e0b !important;
+            color: #fff !important;
+            border: none !important;
+        }
+        .btn-warning:hover { background: #d97706 !important; }
+        .btn-danger {
+            background: var(--mod-danger) !important;
+            color: #fff !important;
+            border: none !important;
+        }
+        .btn-danger:hover { background: #b91c1c !important; }
+        .btn-info {
+            background: var(--mod-info) !important;
+            color: #fff !important;
+            border: none !important;
+        }
+
+        /* Texto de pageTitle (top bar) — destaque elegante */
+        #pageTitle {
+            font-weight: 700 !important;
+            letter-spacing: -0.025em !important;
+        }
+        #pageTitle i {
+            color: var(--mod-primary) !important;
+        }
         [class*="bg-white\\/10"]:not(button):not(.sidebar-item):not([class*="from-emerald"]):not([class*="hover\\:"]) {
             background: rgba(255, 255, 255, 0.03) !important;
         }
