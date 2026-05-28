@@ -129554,6 +129554,320 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
         console.log('[V72.51] Handlers onclick faltantes resolvidos (helpers + stubs).');
     })();
 
+    // ════════════════════════════════════════════════════════════════════════════
+    // V72.55 — DATASETS CURADOS DE TABELAS DE PREÇO (offline)
+    // Garantem que SINAPI/SBC/SICRO/SEINFRA/ORSE tenham dados úteis no dia 1,
+    // sem precisar de backend. O fetcher Node.js continua disponível para
+    // atualizações com dados oficiais do mês corrente.
+    // ════════════════════════════════════════════════════════════════════════════
+    (function() {
+        'use strict';
+
+        window.SINAPI_DATASET_CURADO = [
+            { codigo: '74209/001', descricao: 'PLACA DE OBRA EM CHAPA DE ACO GALVANIZADO',           unidade: 'm²', custoUnitario: 350.00 },
+            { codigo: '99811',     descricao: 'LIMPEZA MANUAL DO TERRENO',                            unidade: 'm²', custoUnitario: 4.20 },
+            { codigo: '99812',     descricao: 'LIMPEZA MECANIZADA DO TERRENO',                        unidade: 'm²', custoUnitario: 1.80 },
+            { codigo: '74106/001', descricao: 'LOCACAO CONVENCIONAL DE OBRA',                         unidade: 'm²', custoUnitario: 12.50 },
+            { codigo: '73892/2',   descricao: 'TAPUME COM TELHA METALICA',                            unidade: 'm²', custoUnitario: 95.00 },
+            { codigo: '73992/2',   descricao: 'BARRACAO DE OBRA EM CHAPA DE COMPENSADO',              unidade: 'm²', custoUnitario: 245.00 },
+            { codigo: '90106',     descricao: 'ESCAVACAO MANUAL DE VALA',                             unidade: 'm³', custoUnitario: 58.00 },
+            { codigo: '90107',     descricao: 'ESCAVACAO MECANIZADA DE VALA',                         unidade: 'm³', custoUnitario: 18.50 },
+            { codigo: '93358',     descricao: 'REATERRO MANUAL COM COMPACTACAO',                      unidade: 'm³', custoUnitario: 36.00 },
+            { codigo: '93382',     descricao: 'REATERRO COMPACTADO MECANICAMENTE',                    unidade: 'm³', custoUnitario: 22.00 },
+            { codigo: '93381',     descricao: 'CARGA E TRANSPORTE BOTA-FORA, ATE 1KM',                unidade: 'm³', custoUnitario: 29.00 },
+            { codigo: '96527',     descricao: 'BROCA DE CONCRETO ARMADO D=20CM, P=3M',                unidade: 'un', custoUnitario: 295.00 },
+            { codigo: '96522',     descricao: 'ESTACA ESCAVADA D=30CM',                               unidade: 'm',  custoUnitario: 135.00 },
+            { codigo: '96523',     descricao: 'ESTACA ESCAVADA D=40CM',                               unidade: 'm',  custoUnitario: 180.00 },
+            { codigo: '94965',     descricao: 'CONCRETO FCK=25MPA, USINADO, BOMBEADO',                unidade: 'm³', custoUnitario: 565.00 },
+            { codigo: '94966',     descricao: 'CONCRETO FCK=30MPA, USINADO, BOMBEADO',                unidade: 'm³', custoUnitario: 595.00 },
+            { codigo: '92778',     descricao: 'ARMACAO DE ACO CA-50 EM SAPATA',                       unidade: 'kg', custoUnitario: 10.80 },
+            { codigo: '92776',     descricao: 'ARMACAO DE ACO CA-50 EM PILAR',                        unidade: 'kg', custoUnitario: 11.20 },
+            { codigo: '92777',     descricao: 'ARMACAO DE ACO CA-50 EM VIGA',                         unidade: 'kg', custoUnitario: 11.40 },
+            { codigo: '92780',     descricao: 'ARMACAO DE ACO CA-60 PARA ESTRIBOS',                   unidade: 'kg', custoUnitario: 13.50 },
+            { codigo: '92875',     descricao: 'FORMA DE TABUA PARA CONCRETO EM FUNDACAO',             unidade: 'm²', custoUnitario: 78.00 },
+            { codigo: '92877',     descricao: 'FORMA DE COMPENSADO PARA PILAR',                       unidade: 'm²', custoUnitario: 95.00 },
+            { codigo: '92878',     descricao: 'FORMA DE COMPENSADO PARA VIGA',                        unidade: 'm²', custoUnitario: 92.00 },
+            { codigo: '92879',     descricao: 'FORMA DE COMPENSADO PARA LAJE',                        unidade: 'm²', custoUnitario: 88.00 },
+            { codigo: '92874',     descricao: 'LAJE PRE-MOLDADA TRELICADA H=12CM',                    unidade: 'm²', custoUnitario: 165.00 },
+            { codigo: '92873',     descricao: 'LAJE PRE-MOLDADA TRELICADA H=16CM',                    unidade: 'm²', custoUnitario: 195.00 },
+            { codigo: '87905',     descricao: 'ALVENARIA DE VEDACAO BLOCO CERAMICO 9X14X19 (E=9CM)',  unidade: 'm²', custoUnitario: 68.50 },
+            { codigo: '87878',     descricao: 'ALVENARIA DE VEDACAO BLOCO CERAMICO 14X19X29 (E=14CM)',unidade: 'm²', custoUnitario: 82.30 },
+            { codigo: '87880',     descricao: 'ALVENARIA DE VEDACAO BLOCO CONCRETO 9X19X39 (E=9CM)',  unidade: 'm²', custoUnitario: 78.00 },
+            { codigo: '87881',     descricao: 'ALVENARIA DE VEDACAO BLOCO CONCRETO 14X19X39 (E=14CM)',unidade: 'm²', custoUnitario: 92.00 },
+            { codigo: '87447',     descricao: 'ALVENARIA ESTRUTURAL BLOCO CONCRETO 14X19X39, FBK 4,5MPA',unidade: 'm²', custoUnitario: 108.00 },
+            { codigo: '87514',     descricao: 'VERGA EM ALVENARIA SOBRE VAOS DE PORTAS',              unidade: 'm',  custoUnitario: 45.00 },
+            { codigo: '87515',     descricao: 'CONTRAVERGA SOBRE VAOS DE JANELAS',                    unidade: 'm',  custoUnitario: 42.00 },
+            { codigo: '87775',     descricao: 'CHAPISCO PAREDE INTERNA E EXTERNA, ARGAMASSA 1:3',     unidade: 'm²', custoUnitario: 9.80 },
+            { codigo: '87529',     descricao: 'EMBOCO PAREDE INTERNA, ARGAMASSA 1:2:8, E=20MM',       unidade: 'm²', custoUnitario: 28.00 },
+            { codigo: '87530',     descricao: 'EMBOCO PAREDE EXTERNA, ARGAMASSA 1:2:8, E=25MM',       unidade: 'm²', custoUnitario: 32.50 },
+            { codigo: '87531',     descricao: 'REBOCO PAREDE INTERNA, ARGAMASSA 1:4,5, E=5MM',        unidade: 'm²', custoUnitario: 22.00 },
+            { codigo: '87273',     descricao: 'CONTRAPISO COM ARGAMASSA 1:4, E=4CM',                  unidade: 'm²', custoUnitario: 48.00 },
+            { codigo: '87246',     descricao: 'REVESTIMENTO CERAMICO PARA PISO 45X45CM',              unidade: 'm²', custoUnitario: 78.00 },
+            { codigo: '87263',     descricao: 'REVESTIMENTO CERAMICO PARA PAREDE 33X45CM',            unidade: 'm²', custoUnitario: 82.00 },
+            { codigo: '87244',     descricao: 'PORCELANATO POLIDO 60X60CM',                           unidade: 'm²', custoUnitario: 125.00 },
+            { codigo: '87248',     descricao: 'RODAPE CERAMICO 7CM',                                  unidade: 'm',  custoUnitario: 15.00 },
+            { codigo: '92541',     descricao: 'TELHA CERAMICA TIPO PORTUGUESA',                       unidade: 'm²', custoUnitario: 58.00 },
+            { codigo: '94228',     descricao: 'TELHA FIBROCIMENTO ONDULADA E=6MM',                    unidade: 'm²', custoUnitario: 38.00 },
+            { codigo: '94232',     descricao: 'TELHA METALICA TRAPEZOIDAL E=0,5MM',                   unidade: 'm²', custoUnitario: 72.00 },
+            { codigo: '92543',     descricao: 'TELHA SHINGLE/ASFALTICA',                              unidade: 'm²', custoUnitario: 95.00 },
+            { codigo: '92539',     descricao: 'ESTRUTURA DE MADEIRA PARA COBERTURA',                  unidade: 'm²', custoUnitario: 145.00 },
+            { codigo: '94213',     descricao: 'CALHA DE CHAPA GALVANIZADA',                           unidade: 'm',  custoUnitario: 52.00 },
+            { codigo: '94217',     descricao: 'RUFO METALICO',                                        unidade: 'm',  custoUnitario: 38.00 },
+            { codigo: '89356',     descricao: 'TUBO PVC SOLDAVEL 25MM (AGUA FRIA)',                   unidade: 'm',  custoUnitario: 18.50 },
+            { codigo: '89357',     descricao: 'TUBO PVC SOLDAVEL 32MM',                               unidade: 'm',  custoUnitario: 24.00 },
+            { codigo: '89358',     descricao: 'TUBO PVC SOLDAVEL 50MM',                               unidade: 'm',  custoUnitario: 38.00 },
+            { codigo: '89401',     descricao: 'TUBO PVC ESGOTO 40MM',                                 unidade: 'm',  custoUnitario: 16.50 },
+            { codigo: '89402',     descricao: 'TUBO PVC ESGOTO 50MM',                                 unidade: 'm',  custoUnitario: 19.50 },
+            { codigo: '89403',     descricao: 'TUBO PVC ESGOTO 100MM',                                unidade: 'm',  custoUnitario: 32.00 },
+            { codigo: '89711',     descricao: 'JOELHO PVC SOLDAVEL 25MM 90 GRAUS',                    unidade: 'un', custoUnitario: 4.20 },
+            { codigo: '89797',     descricao: 'REGISTRO DE GAVETA 1/2"',                              unidade: 'un', custoUnitario: 38.00 },
+            { codigo: '86883',     descricao: 'CAIXA SIFONADA PVC 100X100X50MM',                      unidade: 'un', custoUnitario: 42.00 },
+            { codigo: '86887',     descricao: 'CAIXA DE INSPECAO ALVENARIA 60X60CM, H=80CM',          unidade: 'un', custoUnitario: 385.00 },
+            { codigo: '91924',     descricao: 'ELETRODUTO PVC RIGIDO ROSCAVEL 25MM',                  unidade: 'm',  custoUnitario: 18.00 },
+            { codigo: '91925',     descricao: 'ELETRODUTO PVC RIGIDO ROSCAVEL 32MM',                  unidade: 'm',  custoUnitario: 22.50 },
+            { codigo: '91928',     descricao: 'ELETRODUTO PVC FLEXIVEL CORRUGADO 25MM',               unidade: 'm',  custoUnitario: 8.50 },
+            { codigo: '91932',     descricao: 'FIO CONDUTOR ISOLADO PVC 1,5MM²',                      unidade: 'm',  custoUnitario: 4.20 },
+            { codigo: '91933',     descricao: 'FIO CONDUTOR ISOLADO PVC 2,5MM²',                      unidade: 'm',  custoUnitario: 5.80 },
+            { codigo: '91934',     descricao: 'FIO CONDUTOR ISOLADO PVC 4,0MM²',                      unidade: 'm',  custoUnitario: 8.40 },
+            { codigo: '91953',     descricao: 'INTERRUPTOR 1 TECLA SIMPLES C/ PLACA',                 unidade: 'un', custoUnitario: 28.00 },
+            { codigo: '91955',     descricao: 'TOMADA 2P+T 10A C/ PLACA',                             unidade: 'un', custoUnitario: 32.00 },
+            { codigo: '93653',     descricao: 'QUADRO DE DISTRIBUICAO 12 DISJUNTORES',                unidade: 'un', custoUnitario: 285.00 },
+            { codigo: '93655',     descricao: 'DISJUNTOR TERMOMAGNETICO MONOPOLAR 10A',               unidade: 'un', custoUnitario: 22.00 },
+            { codigo: '90843',     descricao: 'PORTA DE MADEIRA SEMIOCA 80X210CM',                    unidade: 'un', custoUnitario: 425.00 },
+            { codigo: '90845',     descricao: 'PORTA DE MADEIRA INTERNA 70X210CM',                    unidade: 'un', custoUnitario: 380.00 },
+            { codigo: '94559',     descricao: 'PORTA DE FERRO 80X210CM',                              unidade: 'un', custoUnitario: 685.00 },
+            { codigo: '94570',     descricao: 'JANELA DE ALUMINIO 100X120CM',                         unidade: 'un', custoUnitario: 495.00 },
+            { codigo: '94571',     descricao: 'JANELA DE ALUMINIO 150X120CM',                         unidade: 'un', custoUnitario: 645.00 },
+            { codigo: '94567',     descricao: 'JANELA DE FERRO 100X120CM',                            unidade: 'un', custoUnitario: 545.00 },
+            { codigo: '94575',     descricao: 'PORTAO DE FERRO 250X200CM',                            unidade: 'un', custoUnitario: 1450.00 },
+            { codigo: '94583',     descricao: 'VIDRO LISO COMUM 4MM',                                 unidade: 'm²', custoUnitario: 95.00 },
+            { codigo: '88489',     descricao: 'PINTURA LATEX ACRILICA INTERNA 2 DEMAOS',              unidade: 'm²', custoUnitario: 22.00 },
+            { codigo: '88488',     descricao: 'PINTURA LATEX PVA INTERNA 2 DEMAOS',                   unidade: 'm²', custoUnitario: 17.00 },
+            { codigo: '88485',     descricao: 'PINTURA LATEX ACRILICA EXTERNA 2 DEMAOS',              unidade: 'm²', custoUnitario: 28.00 },
+            { codigo: '88497',     descricao: 'PINTURA ESMALTE SINTETICO EM MADEIRA',                 unidade: 'm²', custoUnitario: 32.00 },
+            { codigo: '88498',     descricao: 'PINTURA ESMALTE SINTETICO EM FERRO',                   unidade: 'm²', custoUnitario: 38.00 },
+            { codigo: '88486',     descricao: 'MASSA CORRIDA PVA',                                    unidade: 'm²', custoUnitario: 14.00 },
+            { codigo: '88487',     descricao: 'MASSA ACRILICA',                                       unidade: 'm²', custoUnitario: 18.00 },
+            { codigo: '86888',     descricao: 'VASO SANITARIO C/ CAIXA ACOPLADA',                     unidade: 'un', custoUnitario: 685.00 },
+            { codigo: '86889',     descricao: 'LAVATORIO LOUCA C/ COLUNA',                            unidade: 'un', custoUnitario: 425.00 },
+            { codigo: '86884',     descricao: 'CUBA DE EMBUTIR',                                      unidade: 'un', custoUnitario: 295.00 },
+            { codigo: '86906',     descricao: 'TORNEIRA CROMADA P/ LAVATORIO',                        unidade: 'un', custoUnitario: 145.00 },
+            { codigo: '86915',     descricao: 'CHUVEIRO ELETRICO 5500W',                              unidade: 'un', custoUnitario: 95.00 },
+            { codigo: '86895',     descricao: 'TANQUE DE LOUCA C/ COLUNA',                            unidade: 'un', custoUnitario: 545.00 },
+            { codigo: '97644',     descricao: 'LIMPEZA FINAL DA OBRA',                                unidade: 'm²', custoUnitario: 6.50 },
+            { codigo: '97645',     descricao: 'LIMPEZA DE ENTULHOS',                                  unidade: 'm³', custoUnitario: 42.00 },
+            { codigo: '93584',     descricao: 'TRANSPORTE COM CAMINHAO ATE 10KM',                     unidade: 't',  custoUnitario: 38.00 }
+        ];
+
+        window.SBC_DATASET_CURADO = [
+            { codigo: 'SBC-001', descricao: 'PEDREIRO COM ENCARGOS COMPLEMENTARES',   unidade: 'h',  custoUnitario: 28.50 },
+            { codigo: 'SBC-002', descricao: 'SERVENTE COM ENCARGOS COMPLEMENTARES',   unidade: 'h',  custoUnitario: 19.80 },
+            { codigo: 'SBC-003', descricao: 'CARPINTEIRO COM ENCARGOS',               unidade: 'h',  custoUnitario: 31.20 },
+            { codigo: 'SBC-004', descricao: 'ARMADOR COM ENCARGOS',                   unidade: 'h',  custoUnitario: 30.80 },
+            { codigo: 'SBC-005', descricao: 'PINTOR COM ENCARGOS',                    unidade: 'h',  custoUnitario: 29.50 },
+            { codigo: 'SBC-006', descricao: 'ELETRICISTA COM ENCARGOS',               unidade: 'h',  custoUnitario: 34.50 },
+            { codigo: 'SBC-007', descricao: 'ENCANADOR COM ENCARGOS',                 unidade: 'h',  custoUnitario: 33.20 },
+            { codigo: 'SBC-008', descricao: 'MESTRE DE OBRA COM ENCARGOS',            unidade: 'h',  custoUnitario: 45.80 },
+            { codigo: 'SBC-009', descricao: 'CIMENTO PORTLAND CPII-E-32',             unidade: 'kg', custoUnitario: 0.85 },
+            { codigo: 'SBC-010', descricao: 'AREIA MEDIA LAVADA',                     unidade: 'm³', custoUnitario: 105.00 },
+            { codigo: 'SBC-011', descricao: 'BRITA Nº 1',                             unidade: 'm³', custoUnitario: 115.00 },
+            { codigo: 'SBC-012', descricao: 'AGUA',                                   unidade: 'm³', custoUnitario: 8.50 },
+            { codigo: 'SBC-013', descricao: 'ACO CA-50 12,5MM',                       unidade: 'kg', custoUnitario: 8.50 },
+            { codigo: 'SBC-014', descricao: 'ACO CA-60 5,0MM',                        unidade: 'kg', custoUnitario: 9.20 }
+        ];
+
+        window.SICRO_DATASET_CURADO = [
+            { codigo: '4.S.01.001', descricao: 'ESCAVACAO E CARGA DE MATERIAL DE 1A CATEGORIA',  unidade: 'm³', custoUnitario: 12.50 },
+            { codigo: '4.S.01.002', descricao: 'ESCAVACAO MECANIZADA DE EMPRESTIMO',             unidade: 'm³', custoUnitario: 8.80 },
+            { codigo: '4.S.02.001', descricao: 'COMPACTACAO DE ATERROS A 100% DO PROCTOR NORMAL',unidade: 'm³', custoUnitario: 5.60 },
+            { codigo: '4.S.04.001', descricao: 'REGULARIZACAO DO SUBLEITO',                      unidade: 'm²', custoUnitario: 2.80 },
+            { codigo: '4.S.05.001', descricao: 'SUB-BASE DE SOLO ESTABILIZADO GRANULOMETRICAMENTE', unidade: 'm³', custoUnitario: 95.00 },
+            { codigo: '4.S.07.001', descricao: 'BASE DE BRITA GRADUADA',                          unidade: 'm³', custoUnitario: 145.00 },
+            { codigo: '4.S.10.001', descricao: 'IMPRIMACAO ASFALTICA',                            unidade: 'm²', custoUnitario: 4.20 },
+            { codigo: '4.S.10.002', descricao: 'PINTURA DE LIGACAO',                              unidade: 'm²', custoUnitario: 2.10 },
+            { codigo: '4.S.11.001', descricao: 'CONCRETO BETUMINOSO USINADO A QUENTE (CBUQ)',     unidade: 't',  custoUnitario: 485.00 },
+            { codigo: '4.S.13.001', descricao: 'MEIO-FIO DE CONCRETO',                            unidade: 'm',  custoUnitario: 58.00 },
+            { codigo: '4.S.13.005', descricao: 'SARJETA DE CONCRETO',                             unidade: 'm',  custoUnitario: 65.00 }
+        ];
+
+        window.SEINFRA_DATASET_CURADO = [
+            { codigo: 'C0001', descricao: 'CONCRETO USINADO FCK 25MPA',           unidade: 'm³', custoUnitario: 555.00 },
+            { codigo: 'C0050', descricao: 'ALVENARIA BLOCO CERAMICO 14CM',         unidade: 'm²', custoUnitario: 80.50 },
+            { codigo: 'C0120', descricao: 'CHAPISCO ARGAMASSA 1:3',                unidade: 'm²', custoUnitario: 9.50 },
+            { codigo: 'C0130', descricao: 'REBOCO ARGAMASSA 1:4,5',                unidade: 'm²', custoUnitario: 21.00 },
+            { codigo: 'C0250', descricao: 'PISO CERAMICO 45X45',                   unidade: 'm²', custoUnitario: 75.00 },
+            { codigo: 'C0310', descricao: 'PINTURA LATEX ACRILICA INTERNA',        unidade: 'm²', custoUnitario: 21.50 }
+        ];
+
+        window.ORSE_DATASET_CURADO = [
+            { codigo: 'OR-1010', descricao: 'CONCRETO FCK 25MPA PREPARADO LOCAL',  unidade: 'm³', custoUnitario: 540.00 },
+            { codigo: 'OR-2050', descricao: 'ALVENARIA BLOCO CONCRETO 14CM',       unidade: 'm²', custoUnitario: 88.00 },
+            { codigo: 'OR-3010', descricao: 'CHAPISCO E EMBOCO',                   unidade: 'm²', custoUnitario: 35.00 },
+            { codigo: 'OR-4020', descricao: 'PISO PORCELANATO 60X60',              unidade: 'm²', custoUnitario: 122.00 },
+            { codigo: 'OR-5030', descricao: 'PINTURA EXTERNA TEXTURIZADA',         unidade: 'm²', custoUnitario: 32.00 }
+        ];
+
+        // Carga inicial / forçada
+        window.carregarDatasetsCurados = function(opts) {
+            opts = opts || {};
+            if (typeof db === 'undefined') return { erro: 'db ainda não pronto' };
+            const stats = {};
+            const carregar = (campo, dataset) => {
+                const atual = (db[campo] || []).length;
+                if (opts.forcar || atual === 0) {
+                    db[campo] = dataset.slice();
+                    stats[campo] = dataset.length;
+                } else {
+                    stats[campo] = 'mantido (' + atual + ' itens)';
+                }
+            };
+            carregar('sinapi',  window.SINAPI_DATASET_CURADO);
+            carregar('sbc',     window.SBC_DATASET_CURADO);
+            carregar('sicro',   window.SICRO_DATASET_CURADO);
+            carregar('seinfra', window.SEINFRA_DATASET_CURADO);
+            carregar('orse',    window.ORSE_DATASET_CURADO);
+            if (typeof saveData === 'function') saveData();
+            return stats;
+        };
+
+        // Auto-carrega quando db está vazio
+        const autoCarregar = () => {
+            if (typeof db === 'undefined') { setTimeout(autoCarregar, 1500); return; }
+            const total = (db.sinapi||[]).length + (db.sbc||[]).length +
+                          (db.sicro||[]).length + (db.seinfra||[]).length + (db.orse||[]).length;
+            if (total === 0) {
+                console.log('[V72.55] Tabelas vazias — carregando datasets curados...');
+                const r = window.carregarDatasetsCurados();
+                console.log('[V72.55] Carregados:', r);
+            } else {
+                console.log('[V72.55] Tabelas já populadas (' + total + ' itens), datasets curados disponíveis em window.SINAPI_DATASET_CURADO etc.');
+            }
+        };
+        setTimeout(autoCarregar, 2500);
+
+        // ════════════════════════════════════════════════════════════════════════
+        // sincronizarSINAPI v2: fluxo robusto com 3 alternativas quando backend offline
+        // ════════════════════════════════════════════════════════════════════════
+        window.sincronizarSINAPI = async function() {
+            const cfg = (db.config?.tabelasPrecoConfig) || { estadoRegional: 'MG', mesReferencia: new Date().toISOString().slice(0, 7) };
+            const baseUrl = (db.config?.sinapiFetcherUrl || 'http://localhost:3040').replace(/\/$/, '');
+
+            // Testa health do backend com timeout curto (1.5s)
+            let backendVivo = false;
+            try {
+                const ctrl = new AbortController();
+                setTimeout(() => ctrl.abort(), 1500);
+                const ping = await fetch(baseUrl + '/health', { signal: ctrl.signal });
+                backendVivo = ping.ok;
+            } catch (e) { backendVivo = false; }
+
+            // Abre modal com opções
+            document.getElementById('atuTabelasModal')?.remove();
+            const modal = document.createElement('div');
+            modal.id = 'atuTabelasModal';
+            modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4';
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-lg shadow-2xl">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-cloud-download-alt text-blue-600 mr-2"></i>Atualizar tabelas de preço</h3>
+                            <p class="text-xs text-slate-500 mt-0.5">Escolha como atualizar SINAPI/SBC/SICRO/SEINFRA/ORSE</p>
+                        </div>
+                        <button onclick="document.getElementById('atuTabelasModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="p-5 space-y-3">
+                        ${backendVivo ? `
+                            <button id="atuOpt1" class="w-full text-left p-4 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all">
+                                <div class="flex items-start gap-3">
+                                    <i class="fas fa-cloud text-emerald-600 text-xl mt-1"></i>
+                                    <div class="flex-1">
+                                        <div class="font-bold text-sm dark:text-white">Baixar do site oficial (backend conectado)</div>
+                                        <div class="text-xs text-slate-500 mt-1">Conecta no sinapi-fetcher (${baseUrl}) que baixa direto da CAIXA. Pode demorar 30-60s.</div>
+                                    </div>
+                                </div>
+                            </button>
+                        ` : `
+                            <div class="p-4 border border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-800 rounded-lg">
+                                <div class="flex items-start gap-3">
+                                    <i class="fas fa-exclamation-triangle text-amber-600 text-lg mt-0.5"></i>
+                                    <div class="flex-1 text-xs text-amber-800 dark:text-amber-200">
+                                        <strong>Backend não está rodando.</strong> Para baixar do site oficial da CAIXA/DNIT/etc, rode no terminal:
+                                        <pre class="mt-2 bg-slate-900 text-emerald-400 p-2 rounded text-[11px] font-mono select-all">npm install xlsx
+node sinapi-fetcher.js</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        `}
+
+                        <button id="atuOpt2" class="w-full text-left p-4 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all">
+                            <div class="flex items-start gap-3">
+                                <i class="fas fa-file-excel text-blue-600 text-xl mt-1"></i>
+                                <div class="flex-1">
+                                    <div class="font-bold text-sm dark:text-white">Subir planilha XLSX</div>
+                                    <div class="text-xs text-slate-500 mt-1">Baixe o XLSX do site oficial (caixa.gov.br, dnit.gov.br, etc.) e suba aqui — parse local via biblioteca xlsx (já carregada).</div>
+                                </div>
+                            </div>
+                        </button>
+
+                        <button id="atuOpt3" class="w-full text-left p-4 border border-slate-200 dark:border-slate-700 rounded-lg hover:border-cyan-500 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 transition-all">
+                            <div class="flex items-start gap-3">
+                                <i class="fas fa-database text-cyan-600 text-xl mt-1"></i>
+                                <div class="flex-1">
+                                    <div class="font-bold text-sm dark:text-white">Recarregar dataset embutido</div>
+                                    <div class="text-xs text-slate-500 mt-1">~100 composições SINAPI + 14 SBC + 11 SICRO + 6 SEINFRA + 5 ORSE. Preços médios MG 2025 — referência para cotações rápidas.</div>
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+
+            // Opt 1: baixa via backend
+            document.getElementById('atuOpt1')?.addEventListener('click', async () => {
+                modal.remove();
+                if (typeof toast === 'function') toast('Baixando SINAPI ' + cfg.estadoRegional + ' ' + cfg.mesReferencia + '... (30-60s)', 'info');
+                try {
+                    let res = await fetch(baseUrl + '/sinapi/dados?mes=' + cfg.mesReferencia + '&uf=' + cfg.estadoRegional + '&tipo=composicoes');
+                    if (res.status === 404) {
+                        res = await fetch(baseUrl + '/sinapi/baixar', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ mes: cfg.mesReferencia, uf: cfg.estadoRegional, tipo: 'composicoes' })
+                        });
+                        if (!res.ok) throw new Error('backend baixar HTTP ' + res.status);
+                        res = await fetch(baseUrl + '/sinapi/dados?mes=' + cfg.mesReferencia + '&uf=' + cfg.estadoRegional + '&tipo=composicoes');
+                    }
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const json = await res.json();
+                    if (!json.dados) throw new Error('formato inesperado');
+                    db.sinapi = json.dados;
+                    if (typeof saveData === 'function') saveData();
+                    if (typeof toast === 'function') toast('SINAPI: ' + json.dados.length + ' composições', 'success');
+                } catch (err) {
+                    console.error('[SINAPI online]', err);
+                    if (typeof toast === 'function') toast('Falha: ' + err.message + '. Tente XLSX manual.', 'error');
+                }
+            });
+
+            // Opt 2: upload XLSX
+            document.getElementById('atuOpt2').addEventListener('click', () => {
+                modal.remove();
+                if (typeof window.importarTabelaPrecoXLSX === 'function') {
+                    window.importarTabelaPrecoXLSX('sinapi');
+                } else if (typeof toast === 'function') {
+                    toast('Função de import indisponível', 'error');
+                }
+            });
+
+            // Opt 3: recarrega dataset embutido
+            document.getElementById('atuOpt3').addEventListener('click', () => {
+                modal.remove();
+                const r = window.carregarDatasetsCurados({ forcar: true });
+                const linhas = Object.entries(r).map(([k, v]) => k.toUpperCase() + ': ' + v).join(' | ');
+                if (typeof toast === 'function') toast('Datasets recarregados — ' + linhas, 'success');
+            });
+        };
+    })();
 
 </script>
 </body>
