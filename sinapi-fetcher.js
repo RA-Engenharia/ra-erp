@@ -93,16 +93,141 @@ const mesDoArquivo = (nome) => {
     return m ? m[1] + '-' + m[2] : null;
 };
 
-// Parseia XLSX → array de composições
-const parseXlsx = (buf) => {
+// Converte "1,071.33" / "280.81" / "-" → number (formato US: vírgula=milhar, ponto=decimal)
+const parsePrecoUS = (v) => {
+    if (v === undefined || v === null) return 0;
+    const s = String(v).trim();
+    if (s === '' || s === '-') return 0;
+    return parseFloat(s.replace(/,/g, '')) || 0;
+};
+
+// Parser ESPECÍFICO do SINAPI_Referência (layout real da CAIXA):
+// - Abas CSD/CCD (composições) e ISD/ICD (insumos), cada UF = coluna "Custo (R$)"
+// - Cabeçalho real ~linha 9, dados a partir da linha 10
+// - Linha com siglas de UF (AC, AL, ...) marca a coluna de cada custo
+const parseSinapiReferencia = (buf, uf) => {
     if (!XLSX) throw new Error('xlsx lib não instalada');
+    uf = (uf || 'MG').toUpperCase();
+    const wb = XLSX.read(buf, { type: 'buffer' });
+    const sheetsComposicoes = ['CSD', 'CCD']; // sem/com desoneração
+    const sheetsInsumos = ['ISD', 'ICD'];
+    const out = [];
+
+    // Extrai o código real da fórmula HYPERLINK/MATCH da célula
+    // (na SINAPI Referência o código fica embutido: HYPERLINK(...,104658) / MATCH(104658,...))
+    const codigoDaFormula = (sheet, rowIdx, colIdx) => {
+        const addr = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+        const cell = sheet[addr];
+        if (!cell) return '';
+        if (cell.f) {
+            // tenta MATCH(NUMERO, ... ou último argumento numérico
+            const mMatch = cell.f.match(/MATCH\((\d{3,})/);
+            if (mMatch) return mMatch[1];
+            const mLast = cell.f.match(/,(\d{3,})\)\s*$/);
+            if (mLast) return mLast[1];
+        }
+        // fallback: valor da célula se for número não-zero
+        if (cell.v && cell.v !== 0) return String(cell.v);
+        return '';
+    };
+
+    const processarSheet = (sheetName, ehComposicao) => {
+        const sheet = wb.Sheets[sheetName];
+        if (!sheet) return 0;
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+        if (rows.length < 11) return 0;
+
+        // 1. Acha a linha de cabeçalho (contém "Código" e "Descrição")
+        let headerRow = -1;
+        for (let i = 0; i < Math.min(rows.length, 15); i++) {
+            const joined = rows[i].map(c => String(c)).join('|').toLowerCase();
+            if (joined.includes('código') && joined.includes('descri') && joined.includes('unidade')) {
+                headerRow = i; break;
+            }
+        }
+        if (headerRow < 0) return 0;
+
+        // 2. Acha a coluna da UF: procura nas linhas próximas ao header uma célula == UF
+        let ufCol = -1;
+        for (let i = Math.max(0, headerRow - 7); i <= headerRow + 1; i++) {
+            if (!rows[i]) continue;
+            for (let c = 0; c < rows[i].length; c++) {
+                if (String(rows[i][c]).trim().toUpperCase() === uf) { ufCol = c; break; }
+            }
+            if (ufCol >= 0) break;
+        }
+        // Se não achou a UF, usa a primeira coluna "Custo (R$)" após Unidade
+        if (ufCol < 0) {
+            const hdr = rows[headerRow].map(c => String(c).toLowerCase());
+            ufCol = hdr.findIndex(h => h.includes('custo'));
+        }
+        if (ufCol < 0) return 0;
+
+        // 3. Mapeia colunas fixas pelo header
+        const hdr = rows[headerRow].map(c => String(c).toLowerCase().replace(/\s+/g, ' '));
+        const colCodigo = hdr.findIndex(h => h.includes('código') || h.includes('codigo'));
+        const colDesc = hdr.findIndex(h => h.includes('descri'));
+        const colUnid = hdr.findIndex(h => h.includes('unidade'));
+        if (colCodigo < 0 || colDesc < 0) return 0;
+
+        // 4. Extrai dados
+        let count = 0;
+        for (let i = headerRow + 1; i < rows.length; i++) {
+            const r = rows[i];
+            if (!r) continue;
+            let codigo = String(r[colCodigo] || '').trim();
+            // Se código veio 0/vazio, extrai da fórmula HYPERLINK/MATCH da célula
+            if (!codigo || codigo === '0') {
+                codigo = codigoDaFormula(sheet, i, colCodigo) || codigo;
+            }
+            const descricao = String(r[colDesc] || '').trim();
+            const unidade = String(r[colUnid >= 0 ? colUnid : 3] || '').trim();
+            const custo = parsePrecoUS(r[ufCol]);
+            if (codigo && codigo !== '0' && descricao && custo > 0) {
+                out.push({
+                    codigo, descricao, unidade,
+                    custoUnitario: custo,
+                    tipo: ehComposicao ? 'composicao' : 'insumo',
+                    fonte: sheetName
+                });
+                count++;
+            }
+        }
+        return count;
+    };
+
+    // Prioriza composições sem desoneração (CSD)
+    let total = 0;
+    for (const sn of sheetsComposicoes) {
+        const n = processarSheet(sn, true);
+        if (n > 0) { total += n; break; } // usa a primeira que funcionar
+    }
+    // Se não houver composições, tenta insumos
+    if (total === 0) {
+        for (const sn of sheetsInsumos) {
+            const n = processarSheet(sn, false);
+            if (n > 0) { total += n; break; }
+        }
+    }
+    return out;
+};
+
+// Parser GENÉRICO (pra outras tabelas: SICRO, SEINFRA, SBC, ORSE)
+// Tenta primeiro o layout SINAPI; se falhar, usa heurística de colunas nomeadas.
+const parseXlsx = (buf, uf) => {
+    if (!XLSX) throw new Error('xlsx lib não instalada');
+    // Tenta layout SINAPI primeiro
+    try {
+        const sinapi = parseSinapiReferencia(buf, uf);
+        if (sinapi.length > 0) return sinapi;
+    } catch (e) { /* ignora, cai no genérico */ }
+
     const wb = XLSX.read(buf, { type: 'buffer' });
     const composicoes = [];
     wb.SheetNames.forEach(sheetName => {
         const sheet = wb.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
         rows.forEach(row => {
-            // Heurística ampla: procura colunas com nomes variados
             const codigo = row['Código'] || row['CODIGO'] || row['CÓDIGO'] || row['Codigo'] ||
                           row['Código da Composição'] || row['Código do Insumo'] || row['Cód.'] || '';
             const descricao = row['Descrição'] || row['DESCRICAO'] || row['DESCRIÇÃO'] ||
@@ -112,7 +237,7 @@ const parseXlsx = (buf) => {
             const custoRaw = row['Custo Total'] || row['CUSTO TOTAL'] || row['Preço'] ||
                             row['PRECO'] || row['Preço Unitário'] || row['Custo Unitário'] ||
                             row['Custo'] || row['VALOR'] || 0;
-            const custo = parseFloat(String(custoRaw).replace(/\./g, '').replace(',', '.')) || 0;
+            const custo = parsePrecoUS(custoRaw) || (parseFloat(String(custoRaw).replace(/\./g, '').replace(',', '.')) || 0);
             if (codigo && descricao && custo > 0) {
                 composicoes.push({
                     codigo: String(codigo).trim(),
@@ -254,11 +379,24 @@ const server = http.createServer(async (req, res) => {
 
                     console.log('[sinapi] listando arquivos oficiais...');
                     const itens = await listarOficialSINAPI();
-                    const candidatos = itens.filter(it => {
+                    let candidatos = itens.filter(it => {
                         const m = mesDoArquivo(it.nome);
                         return m === mes && /xlsx/i.test(it.nome);
                     });
-                    if (candidatos.length === 0) throw new Error('Nenhum arquivo XLSX encontrado para ' + mes + '. Disponíveis: ' + itens.slice(0, 5).map(i => mesDoArquivo(i.nome)).filter(Boolean).join(', '));
+
+                    // FALLBACK: se o mês solicitado não existe, usa o mais recente disponível
+                    let mesUsado = mes;
+                    if (candidatos.length === 0) {
+                        const xlsxItens = itens.filter(it => /xlsx/i.test(it.nome) && mesDoArquivo(it.nome));
+                        if (xlsxItens.length > 0) {
+                            // já vem ordenado por Modified desc, então o primeiro é o mais recente
+                            const maisRecente = xlsxItens.sort((a, b) => mesDoArquivo(b.nome).localeCompare(mesDoArquivo(a.nome)))[0];
+                            mesUsado = mesDoArquivo(maisRecente.nome);
+                            candidatos = [maisRecente];
+                            console.log('[sinapi] mês ' + mes + ' indisponível — usando o mais recente: ' + mesUsado);
+                        }
+                    }
+                    if (candidatos.length === 0) throw new Error('Nenhum XLSX SINAPI encontrado. Disponíveis: ' + itens.slice(0, 6).map(i => mesDoArquivo(i.nome)).filter(Boolean).join(', '));
 
                     const arqOficial = candidatos[0];
                     console.log('[sinapi] baixando', arqOficial.nome, '(' + Math.round(arqOficial.tamanho/1024/1024) + 'MB) de', arqOficial.url);
@@ -286,19 +424,22 @@ const server = http.createServer(async (req, res) => {
                     }
                     if (!alvo) throw new Error('Não achei XLSX dentro do ZIP. Arquivos: ' + entries.slice(0,5).map(e => e.entryName).join(', '));
 
-                    console.log('[sinapi] parseando', alvo.entryName);
+                    console.log('[sinapi] parseando', alvo.entryName, '(UF=' + uf.toUpperCase() + ')');
                     const xlsxBuf = alvo.getData();
-                    const dados = parseXlsx(xlsxBuf);
+                    const dados = parseXlsx(xlsxBuf, uf);
                     if (dados.length === 0) throw new Error('Parser retornou 0 itens. XLSX pode ter layout diferente — abra ' + alvo.entryName + ' manualmente e verifique cabeçalhos.');
 
-                    const dir = path.join(CACHE_DIR, mes);
-                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-                    const arq = cacheFile(mes, uf.toUpperCase(), 'composicoes');
-                    fs.writeFileSync(arq, JSON.stringify({ mes, uf, tipo:'composicoes', count: dados.length, dados, fonte: arqOficial.url, arquivo: alvo.entryName }));
-                    console.log('[sinapi] ok:', dados.length, 'composições →', arq);
+                    // Cacheia tanto no mês solicitado quanto no mês real (pra GET /dados achar)
+                    [mes, mesUsado].forEach(mm => {
+                        const dir = path.join(CACHE_DIR, mm);
+                        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                        const arq = cacheFile(mm, uf.toUpperCase(), 'composicoes');
+                        fs.writeFileSync(arq, JSON.stringify({ mes: mesUsado, uf, tipo:'composicoes', count: dados.length, dados, fonte: arqOficial.url, arquivo: alvo.entryName }));
+                    });
+                    console.log('[sinapi] ok:', dados.length, 'composições (mês ' + mesUsado + ') →', cacheFile(mes, uf.toUpperCase(), 'composicoes'));
 
                     res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ ok: true, count: dados.length, arquivoXlsx: alvo.entryName, fonteZip: arqOficial.url }));
+                    res.end(JSON.stringify({ ok: true, count: dados.length, mesUsado, arquivoXlsx: alvo.entryName, fonteZip: arqOficial.url }));
                 } catch (err) {
                     console.error('[sinapi] erro:', err.message);
                     res.writeHead(500, { 'Content-Type': 'application/json' });
