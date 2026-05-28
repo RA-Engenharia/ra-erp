@@ -129764,6 +129764,112 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
         } catch (e) {}
 
         // ════════════════════════════════════════════════════════════════════════
+        // V72.57 — ATUALIZAÇÃO AUTOMÁTICA DA SINAPI NO STARTUP
+        // Ao abrir o sistema (com backend rodando), verifica se há um mês mais
+        // recente da SINAPI na CAIXA do que o já carregado. Se houver, baixa,
+        // descompacta e lança TODAS as composições no sistema — sozinho.
+        // Não baixa de novo se já tem a versão mais recente (compara mês).
+        // ════════════════════════════════════════════════════════════════════════
+        window.verificarAtualizacaoSINAPIAuto = async function(opts) {
+            opts = opts || {};
+            const cfg = (db.config && db.config.tabelasPrecoConfig) || { estadoRegional: 'MG' };
+            const uf = cfg.estadoRegional || 'MG';
+            const baseUrl = (db.config && db.config.sinapiFetcherUrl) || location.origin;
+
+            // 1. Backend está vivo?
+            let vivo = false;
+            try {
+                const ctrl = new AbortController();
+                setTimeout(() => ctrl.abort(), 2000);
+                const ping = await fetch(baseUrl + '/health', { signal: ctrl.signal });
+                vivo = ping.ok;
+            } catch (e) { vivo = false; }
+            if (!vivo) {
+                if (opts.manual && typeof toast === 'function') toast('Backend offline — rode o Iniciar-RA-ERP', 'warning');
+                return;
+            }
+
+            // 2. Qual o mês mais recente na CAIXA?
+            let mesMaisRecente = null;
+            try {
+                const r = await fetch(baseUrl + '/sinapi/listar-oficial');
+                const j = await r.json();
+                if (j.meses && j.meses.length > 0) {
+                    // já vem ordenado desc; pega o primeiro com xlsx
+                    const comXlsx = j.meses.find(m => m.xlsx);
+                    mesMaisRecente = comXlsx ? comXlsx.mes : j.meses[0].mes;
+                }
+            } catch (e) {
+                if (opts.manual && typeof toast === 'function') toast('Não consegui consultar a CAIXA', 'error');
+                return;
+            }
+            if (!mesMaisRecente) return;
+
+            // 3. Já tenho essa versão? (compara mês carregado)
+            const mesCarregado = db.config && db.config.sinapiMesCarregado;
+            const qtdAtual = (db.sinapi || []).length;
+            const temBaseOficial = qtdAtual >= 1000; // base oficial (não os ~93 curados)
+
+            // 3a. Se já tem base oficial grande mas sem registro de mês (baixou em
+            //     versão anterior do sistema), assume que é a recente e só marca —
+            //     evita re-baixar 15MB desnecessariamente.
+            if (!opts.forcar && temBaseOficial && !mesCarregado) {
+                db.config = db.config || {};
+                db.config.sinapiMesCarregado = mesMaisRecente;
+                if (typeof saveData === 'function') saveData();
+                console.log('[V72.57] Base oficial já presente (' + qtdAtual + ' itens) — marcada como ' + mesMaisRecente);
+                if (opts.manual && typeof toast === 'function') toast('SINAPI já carregada (' + qtdAtual + ' composições)', 'info');
+                return;
+            }
+
+            // 3b. Já está na versão mais recente
+            if (!opts.forcar && mesCarregado === mesMaisRecente && temBaseOficial) {
+                console.log('[V72.57] SINAPI já atualizada (' + mesMaisRecente + ', ' + qtdAtual + ' itens)');
+                if (opts.manual && typeof toast === 'function') toast('SINAPI já está na versão mais recente (' + mesMaisRecente + ')', 'info');
+                return;
+            }
+
+            // 4. Baixa + descompacta + lança
+            console.log('[V72.57] Atualizando SINAPI para ' + mesMaisRecente + ' (UF ' + uf + ')...');
+            if (typeof toast === 'function') toast('Baixando SINAPI ' + mesMaisRecente + ' da CAIXA... (pode levar 1 min)', 'info', { duration: 8000 });
+            try {
+                let res = await fetch(baseUrl + '/sinapi/dados?mes=' + mesMaisRecente + '&uf=' + uf + '&tipo=composicoes');
+                if (res.status === 404) {
+                    res = await fetch(baseUrl + '/sinapi/baixar', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mes: mesMaisRecente, uf })
+                    });
+                    if (!res.ok) throw new Error('baixar HTTP ' + res.status);
+                    res = await fetch(baseUrl + '/sinapi/dados?mes=' + mesMaisRecente + '&uf=' + uf + '&tipo=composicoes');
+                }
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const json = await res.json();
+                if (!json.dados || !json.dados.length) throw new Error('sem dados');
+
+                // LANÇA todas as composições no sistema
+                db.sinapi = json.dados;
+                db.config = db.config || {};
+                db.config.sinapiMesCarregado = mesMaisRecente;
+                if (typeof saveData === 'function') saveData();
+                if (window.persistirTabelasGrandes) await window.persistirTabelasGrandes();
+                // re-renderiza views que usam SINAPI
+                if (typeof renderOrcamentosUnificado === 'function') { try { renderOrcamentosUnificado(); } catch(e){} }
+                if (typeof atualizarContadoresSINAPIBase === 'function') { try { atualizarContadoresSINAPIBase(); } catch(e){} }
+                console.log('[V72.57] ✅ SINAPI ' + mesMaisRecente + ' lançada: ' + json.dados.length + ' composições');
+                if (typeof toast === 'function') toast('✅ SINAPI ' + mesMaisRecente + ' atualizada: ' + json.dados.length + ' composições', 'success', { duration: 6000 });
+            } catch (err) {
+                console.warn('[V72.57] Falha na atualização automática:', err.message);
+                if (opts.manual && typeof toast === 'function') toast('Falha ao baixar: ' + err.message, 'error');
+            }
+        };
+
+        // Roda a verificação automática no startup (depois que tudo carregou).
+        // Silenciosa: só age se houver versão nova. Não incomoda se já está atualizado.
+        setTimeout(() => {
+            if (window.verificarAtualizacaoSINAPIAuto) window.verificarAtualizacaoSINAPIAuto({ manual: false });
+        }, 6000);
+
+        // ════════════════════════════════════════════════════════════════════════
         // V72.55.1 — Tabelas grandes (SINAPI 8000+) só no IndexedDB, NÃO no localStorage
         // O localStorage tem ~5MB; a base SINAPI completa estoura a quota e
         // desestabiliza o save. Solução: tirar as tabelas grandes do objeto antes
