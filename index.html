@@ -129746,6 +129746,78 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
         setTimeout(autoCarregar, 2500);
 
         // ════════════════════════════════════════════════════════════════════════
+        // V72.55.1 — Tabelas grandes (SINAPI 8000+) só no IndexedDB, NÃO no localStorage
+        // O localStorage tem ~5MB; a base SINAPI completa estoura a quota e
+        // desestabiliza o save. Solução: tirar as tabelas grandes do objeto antes
+        // de serializar pro localStorage, mantê-las em memória, e persistir no
+        // IndexedDB (HybridStorage, 10GB). Restaura na inicialização.
+        // ════════════════════════════════════════════════════════════════════════
+        const TABELAS_GRANDES = ['sinapi', 'sinapiInsumos', 'sicro', 'seinfra', 'sbc', 'orse'];
+        const LIMIAR_IDB = 500; // acima disso, persiste só no IndexedDB
+
+        window.persistirTabelasGrandes = async function() {
+            if (typeof HybridStorage === 'undefined' || !HybridStorage.isReady) return;
+            for (const t of TABELAS_GRANDES) {
+                if (Array.isArray(db[t]) && db[t].length > 0) {
+                    try { await HybridStorage.set('ra_tabela_' + t, db[t]); }
+                    catch (e) { console.warn('[V72.55.1] persist ' + t + ':', e.message); }
+                }
+            }
+        };
+
+        window.restaurarTabelasGrandes = async function() {
+            if (typeof HybridStorage === 'undefined' || !HybridStorage.isReady) return;
+            let restaurou = false;
+            for (const t of TABELAS_GRANDES) {
+                try {
+                    const dados = await HybridStorage.get('ra_tabela_' + t, null);
+                    if (Array.isArray(dados) && dados.length > (db[t] || []).length) {
+                        db[t] = dados;
+                        restaurou = true;
+                        console.log('[V72.55.1] ' + t + ' restaurado do IndexedDB: ' + dados.length + ' itens');
+                    }
+                } catch (e) {}
+            }
+            if (restaurou) {
+                // re-renderiza views que dependem das tabelas
+                if (typeof renderOrcamentosUnificado === 'function' &&
+                    document.getElementById('view-orcamentoUnificado') &&
+                    !document.getElementById('view-orcamentoUnificado').classList.contains('hidden')) {
+                    try { renderOrcamentosUnificado(); } catch (e) {}
+                }
+            }
+        };
+
+        // Wrapper no saveData: remove tabelas grandes antes do localStorage
+        const _saveDataOrig = window.saveData;
+        window.saveData = function() {
+            const backup = {};
+            let removeu = false;
+            TABELAS_GRANDES.forEach(t => {
+                if (Array.isArray(db[t]) && db[t].length > LIMIAR_IDB) {
+                    backup[t] = db[t];
+                    db[t] = []; // esvazia só pra serialização do localStorage
+                    removeu = true;
+                }
+            });
+            try {
+                if (typeof _saveDataOrig === 'function') _saveDataOrig();
+            } finally {
+                // restaura as referências em memória imediatamente
+                Object.keys(backup).forEach(t => { db[t] = backup[t]; });
+            }
+            if (removeu) {
+                // persiste as grandes no IndexedDB (assíncrono)
+                window.persistirTabelasGrandes();
+            }
+        };
+
+        // Restaura tabelas grandes ao iniciar (depois do db carregar)
+        setTimeout(() => {
+            if (window.restaurarTabelasGrandes) window.restaurarTabelasGrandes();
+        }, 3800);
+
+        // ════════════════════════════════════════════════════════════════════════
         // sincronizarSINAPI v2: fluxo robusto com 3 alternativas quando backend offline
         // ════════════════════════════════════════════════════════════════════════
         window.sincronizarSINAPI = async function() {
@@ -129842,7 +129914,9 @@ node sinapi-fetcher.js</pre>
                     if (!json.dados) throw new Error('formato inesperado');
                     db.sinapi = json.dados;
                     if (typeof saveData === 'function') saveData();
-                    if (typeof toast === 'function') toast('SINAPI: ' + json.dados.length + ' composições', 'success');
+                    if (window.persistirTabelasGrandes) await window.persistirTabelasGrandes();
+                    if (typeof renderOrcamentosUnificado === 'function') { try { renderOrcamentosUnificado(); } catch(e){} }
+                    if (typeof toast === 'function') toast('SINAPI: ' + json.dados.length + ' composições carregadas e salvas', 'success');
                 } catch (err) {
                     console.error('[SINAPI online]', err);
                     if (typeof toast === 'function') toast('Falha: ' + err.message + '. Tente XLSX manual.', 'error');
