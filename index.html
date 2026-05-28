@@ -19909,6 +19909,110 @@
             background: var(--mod-accent) !important;
             color: #fff !important;
         }
+
+        /* ═══════════════════════════════════════════════════════════════════
+           V72.54.3 — Polimento final visual
+           ═══════════════════════════════════════════════════════════════════ */
+
+        /* Divisor sidebar/conteúdo — sombra suave criando separação */
+        #sidebar {
+            box-shadow: 1px 0 0 var(--mod-border), 4px 0 12px -8px rgba(15, 23, 42, 0.15) !important;
+            z-index: 30 !important;
+        }
+
+        /* Cards com border-2 colorida (M.O. Pendente, etc) — afina */
+        .glass-panel[class*="border-2"][class*="border-orange-200"],
+        .glass-panel[class*="border-2"][class*="border-blue-200"],
+        .glass-panel[class*="border-2"][class*="border-green-200"],
+        .glass-panel[class*="border-2"][class*="border-emerald-200"],
+        .glass-panel[class*="border-2"][class*="border-red-200"] {
+            border-width: 1px !important;
+            border-style: solid !important;
+        }
+        .glass-panel[class*="border-orange-200"] { border-color: rgba(251, 146, 60, 0.4) !important; }
+        .glass-panel[class*="border-blue-200"]   { border-color: rgba(96, 165, 250, 0.4) !important; }
+        .glass-panel[class*="border-green-200"]  { border-color: rgba(74, 222, 128, 0.4) !important; }
+        .glass-panel[class*="border-red-200"]    { border-color: rgba(248, 113, 113, 0.4) !important; }
+
+        /* Container max-width pra ultrawides não esticarem absurdamente */
+        .view-section {
+            max-width: 1600px !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+        }
+
+        /* Hover em cards: lift sutil + border mais marcado */
+        .glass-panel {
+            transition: border-color 0.18s, box-shadow 0.18s, transform 0.18s !important;
+        }
+
+        /* Chips bg-color/100 (interno de M.O. Pendente etc) — suavizar */
+        [class*="bg-green-50"]:not(button), [class*="bg-blue-50"]:not(button),
+        [class*="bg-purple-50"]:not(button), [class*="bg-orange-50"]:not(button),
+        [class*="bg-yellow-50"]:not(button), [class*="bg-amber-50"]:not(button),
+        [class*="bg-red-50"]:not(button), [class*="bg-emerald-50"]:not(button) {
+            border: 1px solid currentColor !important;
+            border-color: rgba(0,0,0,0.05) !important;
+        }
+
+        /* Dropdown "Mais ações" — z-index garantido */
+        #orcMaisAcoesMenu {
+            z-index: 100 !important;
+        }
+        #orcMaisAcoesMenu button:hover,
+        #orcMaisAcoesMenu label:hover {
+            background: var(--mod-hover) !important;
+        }
+
+        /* pageTitle — esconde a quebra em 2 linhas truncando se ultrapassar */
+        #pageTitle {
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            max-width: 380px !important;
+        }
+
+        /* Top bar separator: linha sutil abaixo */
+        #header, header.sticky, nav.sticky {
+            border-bottom: 1px solid var(--mod-border) !important;
+        }
+
+        /* Botões de ícone (sem texto) — formato consistente quadrado */
+        button.quick-action {
+            width: 36px !important;
+            height: 36px !important;
+            border-radius: 8px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: background 0.15s !important;
+        }
+        button.quick-action:hover {
+            background: var(--mod-hover) !important;
+        }
+
+        /* Search global no header */
+        .search-global {
+            background: var(--mod-card) !important;
+            border: 1px solid var(--mod-border-strong) !important;
+            border-radius: var(--mod-radius) !important;
+            color: var(--mod-text) !important;
+            padding: 8px 12px 8px 36px !important;
+        }
+        html.dark .search-global {
+            background: rgba(255, 255, 255, 0.05) !important;
+            color: #f1f5f9 !important;
+        }
+        .search-global::placeholder { color: var(--mod-text-muted) !important; }
+
+        /* Cards CTA com ícone gigante decorativo — suavizar */
+        .glass-panel [class*="w-16"][class*="h-16"][class*="rounded"] {
+            width: 48px !important;
+            height: 48px !important;
+        }
+        .glass-panel [class*="w-16"][class*="h-16"] i {
+            font-size: 20px !important;
+        }
     </style>
     <script>
         // V72.54.1 — Patch: substitui "NaN" em renderizações por "0,00" + faz
@@ -29667,29 +29771,40 @@ Ex: Prestação de Serviço Engenharia - OBRA: [NOME DA OBRA] RQ X.X.X/A - R0X D
                             </h3>
                             <p class="text-sm opacity-80 mt-2 max-w-lg">Sistema completo de orçamentação com composições SINAPI, BDI configurável, curva ABC, cronograma físico-financeiro e propostas comerciais.</p>
                         </div>
-                        <div class="flex gap-2 flex-wrap">
-                            <label class="px-4 py-3 bg-emerald-500/80 hover:bg-emerald-500 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all cursor-pointer shadow-lg">
-                                <i class="fas fa-file-excel"></i>Importar SINAPI
-                                <input type="file" accept=".xlsx,.xls" onchange="importarPlanilhaSINAPIDoOrcamento(this.files[0])" class="hidden">
-                            </label>
-                            <button onclick="abrirAssistenteOrcamento()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all">
-                                <i class="fas fa-robot"></i>Assistente IA
-                            </button>
-                            <button onclick="abrirConfigTabelasPreco()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all" title="Configurar SINAPI, SBC, SICRO, SEINFRA, ORSE + fallback IA">
-                                <i class="fas fa-database"></i>Tabelas + IA
-                            </button>
-                            <button onclick="sincronizarSINAPI()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all" title="Baixar/atualizar SINAPI do site da CAIXA (precisa rodar sinapi-fetcher.js)">
-                                <i class="fas fa-cloud-download-alt"></i>Atualizar SINAPI
-                            </button>
-                            <button onclick="abrirRevisaoComposicoesIA()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all" title="Revisar composições geradas pela IA">
-                                <i class="fas fa-robot"></i>Revisar IA
-                            </button>
-                            <button onclick="importarEscopoInteligente()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl font-bold text-sm flex items-center gap-2 backdrop-blur-sm transition-all">
-                                <i class="fas fa-magic"></i>Importar Escopo
-                            </button>
-                            <button onclick="novoOrcamentoUnificado()" class="px-4 py-3 bg-white text-emerald-600 hover:bg-emerald-50 rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg transition-all">
+                        <div class="flex gap-2 flex-wrap items-center">
+                            <button onclick="novoOrcamentoUnificado()" class="px-4 py-2.5 bg-white text-emerald-700 hover:bg-emerald-50 rounded-lg font-semibold text-sm flex items-center gap-2 shadow-sm transition-all">
                                 <i class="fas fa-plus"></i>Novo Orçamento
                             </button>
+                            <button onclick="abrirAssistenteOrcamento()" class="px-4 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition-all">
+                                <i class="fas fa-robot"></i>Assistente IA
+                            </button>
+                            <button onclick="abrirConfigTabelasPreco()" class="px-4 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition-all" title="Configurar tabelas de preço + fallback IA">
+                                <i class="fas fa-database"></i>Tabelas + IA
+                            </button>
+                            <div class="relative" id="orcMaisAcoesWrap">
+                                <button onclick="document.getElementById('orcMaisAcoesMenu').classList.toggle('hidden')" class="px-3 py-2.5 bg-white/15 hover:bg-white/25 text-white rounded-lg font-semibold text-sm flex items-center gap-2 transition-all" title="Mais ações">
+                                    <i class="fas fa-ellipsis-vertical"></i>Mais
+                                </button>
+                                <div id="orcMaisAcoesMenu" class="hidden absolute right-0 top-full mt-1 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 py-1 min-w-[220px]" onmouseleave="this.classList.add('hidden')">
+                                    <label class="flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer">
+                                        <i class="fas fa-file-excel text-emerald-600 w-4"></i>
+                                        <span>Importar planilha SINAPI</span>
+                                        <input type="file" accept=".xlsx,.xls" onchange="importarPlanilhaSINAPIDoOrcamento(this.files[0]);document.getElementById('orcMaisAcoesMenu').classList.add('hidden')" class="hidden">
+                                    </label>
+                                    <button onclick="sincronizarSINAPI();document.getElementById('orcMaisAcoesMenu').classList.add('hidden')" class="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
+                                        <i class="fas fa-cloud-download-alt text-blue-600 w-4"></i>
+                                        <span>Atualizar SINAPI online</span>
+                                    </button>
+                                    <button onclick="abrirRevisaoComposicoesIA();document.getElementById('orcMaisAcoesMenu').classList.add('hidden')" class="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
+                                        <i class="fas fa-robot text-cyan-600 w-4"></i>
+                                        <span>Revisar composições IA</span>
+                                    </button>
+                                    <button onclick="importarEscopoInteligente();document.getElementById('orcMaisAcoesMenu').classList.add('hidden')" class="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
+                                        <i class="fas fa-magic text-purple-600 w-4"></i>
+                                        <span>Importar escopo de texto</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     
