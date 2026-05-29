@@ -10,8 +10,11 @@ from dataclasses import replace  # noqa: E402
 
 from bot import EmaRsiAtrStrategy, Settings, generate_synthetic_candles  # noqa: E402
 from bot.backtest import run_backtest  # noqa: E402
+from bot import indicators  # noqa: E402
 from bot.strategies import (  # noqa: E402
+    BollingerStrategy,
     BreakoutStrategy,
+    MacdStrategy,
     MeanReversionStrategy,
     TrendEmaStrategy,
 )
@@ -29,7 +32,14 @@ SETTINGS = Settings.default()
 
 class TestStrategiesRun(unittest.TestCase):
     def test_each_strategy_runs_and_trades(self):
-        for cls in (BreakoutStrategy, MeanReversionStrategy, TrendEmaStrategy):
+        strategies = (
+            BreakoutStrategy,
+            MeanReversionStrategy,
+            TrendEmaStrategy,
+            MacdStrategy,
+            BollingerStrategy,
+        )
+        for cls in strategies:
             result = run_backtest(CANDLES, cls(), SETTINGS)
             # roda sem erro e gera ao menos algumas operacoes
             self.assertGreater(result.metrics["n_trades"], 0, cls.__name__)
@@ -39,6 +49,30 @@ class TestStrategiesRun(unittest.TestCase):
         strat.prepare(CANDLES)
         for i in range(strat.warmup):
             self.assertIsNone(strat.signal(i).action)
+
+
+class TestNewIndicators(unittest.TestCase):
+    def test_macd_alignment_and_warmup(self):
+        closes = [c.close for c in CANDLES]
+        line, sig, hist = indicators.macd(closes, 12, 26, 9)
+        self.assertEqual(len(line), len(closes))
+        self.assertEqual(len(sig), len(closes))
+        # aquecimento: nada de sinal/histograma no inicio
+        self.assertIsNone(sig[0])
+        self.assertIsNone(hist[0])
+        # onde linha e sinal existem, histograma = linha - sinal
+        for i in range(len(closes)):
+            if line[i] is not None and sig[i] is not None:
+                self.assertAlmostEqual(hist[i], line[i] - sig[i], places=9)
+
+    def test_bollinger_bands_order(self):
+        closes = [c.close for c in CANDLES]
+        mid, up, lo = indicators.bollinger(closes, 20, 2.0)
+        self.assertIsNone(mid[0])
+        for i in range(len(closes)):
+            if mid[i] is not None:
+                self.assertLessEqual(lo[i], mid[i])
+                self.assertLessEqual(mid[i], up[i])
 
 
 class TestCompareStrategies(unittest.TestCase):

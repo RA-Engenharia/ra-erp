@@ -51,6 +51,65 @@ def rsi(values: list[float], period: int = 14) -> list[float | None]:
     return out
 
 
+def macd(
+    values: list[float],
+    fast: int = 12,
+    slow: int = 26,
+    signal: int = 9,
+) -> tuple[list[float | None], list[float | None], list[float | None]]:
+    """MACD: (linha, sinal, histograma). Mede momentum via diferenca de EMAs.
+
+    linha   = EMA(fast) - EMA(slow)
+    sinal   = EMA(linha, signal)
+    histograma = linha - sinal  (cruza o zero quando a linha cruza o sinal)
+    """
+    n = len(values)
+    ef, es = ema(values, fast), ema(values, slow)
+    line: list[float | None] = [None] * n
+    for i in range(n):
+        if ef[i] is not None and es[i] is not None:
+            line[i] = ef[i] - es[i]
+
+    sig: list[float | None] = [None] * n
+    start = next((i for i, v in enumerate(line) if v is not None), None)
+    if start is not None:
+        valid = [v for v in line[start:]]  # sequencia contigua de floats
+        sline = ema(valid, signal)
+        for k, val in enumerate(sline):
+            sig[start + k] = val
+
+    hist: list[float | None] = [None] * n
+    for i in range(n):
+        if line[i] is not None and sig[i] is not None:
+            hist[i] = line[i] - sig[i]
+    return line, sig, hist
+
+
+def bollinger(
+    values: list[float],
+    period: int = 20,
+    k: float = 2.0,
+) -> tuple[list[float | None], list[float | None], list[float | None]]:
+    """Bandas de Bollinger: (media, banda_superior, banda_inferior).
+
+    Banda = media movel +/- k desvios-padrao. Preco fora das bandas sugere
+    extremo (base de estrategias de reversao a media).
+    """
+    n = len(values)
+    mid: list[float | None] = [None] * n
+    upper: list[float | None] = [None] * n
+    lower: list[float | None] = [None] * n
+    if period <= 0:
+        return mid, upper, lower
+    for i in range(period - 1, n):
+        window = values[i - period + 1 : i + 1]
+        m = sum(window) / period
+        var = sum((x - m) ** 2 for x in window) / period
+        sd = var**0.5
+        mid[i], upper[i], lower[i] = m, m + k * sd, m - k * sd
+    return mid, upper, lower
+
+
 def atr(
     highs: list[float],
     lows: list[float],

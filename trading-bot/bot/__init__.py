@@ -16,7 +16,13 @@ from .data import (
 from .feeds import CcxtLiveFeed, ReplayFeed
 from .live import LiveTrader, LiveUpdate, candle_feed, run_live
 from .risk import RiskManager
-from .strategies import BreakoutStrategy, MeanReversionStrategy, TrendEmaStrategy
+from .strategies import (
+    BollingerStrategy,
+    BreakoutStrategy,
+    MacdStrategy,
+    MeanReversionStrategy,
+    TrendEmaStrategy,
+)
 from .strategy import EmaRsiAtrStrategy, Signal, Strategy
 from .validation import (
     StrategySpec,
@@ -40,6 +46,8 @@ __all__ = [
     "BreakoutStrategy",
     "MeanReversionStrategy",
     "TrendEmaStrategy",
+    "MacdStrategy",
+    "BollingerStrategy",
     "StrategySpec",
     "compare_strategies",
     "grid_search",

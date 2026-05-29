@@ -101,6 +101,81 @@ class MeanReversionStrategy(Strategy):
         return Signal(None)
 
 
+class MacdStrategy(Strategy):
+    """Cruzamento do MACD: compra quando a linha cruza o sinal para cima.
+
+    Captura momentum. O histograma trocando de sinal marca o cruzamento --
+    olhamos a barra atual vs a anterior para detectar a virada (sem lookahead).
+    """
+
+    def __init__(self, params: dict | None = None):
+        p = params or {}
+        self.fast = int(p.get("fast", 12))
+        self.slow = int(p.get("slow", 26))
+        self.signal_period = int(p.get("signal", 9))
+        self.atr_period = int(p.get("atr_period", 14))
+        self.stop_atr_mult = float(p.get("stop_atr_mult", 1.5))
+        self.reward_risk = float(p.get("reward_risk", 1.5))
+        self.allow_short = bool(p.get("allow_short", True))
+        self.warmup = self.slow + self.signal_period + 2
+
+    def prepare(self, candles: list[Candle]) -> None:
+        self._closes, highs, lows = _ohlc(candles)
+        _, _, self._hist = indicators.macd(self._closes, self.fast, self.slow, self.signal_period)
+        self._atr = indicators.atr(highs, lows, self._closes, self.atr_period)
+
+    def signal(self, i: int) -> Signal:
+        if i < self.warmup:
+            return Signal(None)
+        h, hp, atr_v = self._hist[i], self._hist[i - 1], self._atr[i]
+        if None in (h, hp, atr_v):
+            return Signal(None)
+        price = self._closes[i]
+        dist = atr_v * self.stop_atr_mult
+        if hp <= 0 < h:  # histograma cruzou para cima
+            return Signal("long", price - dist, price + dist * self.reward_risk, "macd_up")
+        if self.allow_short and hp >= 0 > h:  # cruzou para baixo
+            return Signal("short", price + dist, price - dist * self.reward_risk, "macd_dn")
+        return Signal(None)
+
+
+class BollingerStrategy(Strategy):
+    """Reversao por Bollinger: compra abaixo da banda inferior, vende acima da
+
+    superior. Aposta que o preco volta para a media. Funciona em mercado
+    lateral e sofre em tendencia forte -- por isso o comparador a julga.
+    """
+
+    def __init__(self, params: dict | None = None):
+        p = params or {}
+        self.period = int(p.get("period", 20))
+        self.k = float(p.get("k", 2.0))
+        self.atr_period = int(p.get("atr_period", 14))
+        self.stop_atr_mult = float(p.get("stop_atr_mult", 1.5))
+        self.reward_risk = float(p.get("reward_risk", 1.0))
+        self.allow_short = bool(p.get("allow_short", True))
+        self.warmup = max(self.period, self.atr_period) + 2
+
+    def prepare(self, candles: list[Candle]) -> None:
+        self._closes, highs, lows = _ohlc(candles)
+        _, self._up, self._lo = indicators.bollinger(self._closes, self.period, self.k)
+        self._atr = indicators.atr(highs, lows, self._closes, self.atr_period)
+
+    def signal(self, i: int) -> Signal:
+        if i < self.warmup:
+            return Signal(None)
+        up, lo, atr_v = self._up[i], self._lo[i], self._atr[i]
+        if None in (up, lo, atr_v):
+            return Signal(None)
+        price = self._closes[i]
+        dist = atr_v * self.stop_atr_mult
+        if price < lo:
+            return Signal("long", price - dist, price + dist * self.reward_risk, "bb_long")
+        if self.allow_short and price > up:
+            return Signal("short", price + dist, price - dist * self.reward_risk, "bb_short")
+        return Signal(None)
+
+
 class TrendEmaStrategy(Strategy):
     """Cruzamento de EMAs, mas SO a favor da tendencia maior (filtro de EMA longa).
 
