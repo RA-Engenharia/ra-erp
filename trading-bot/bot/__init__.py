@@ -13,6 +13,7 @@ from .data import (
     generate_synthetic_candles,
     load_candles_csv,
 )
+from .feeds import CcxtLiveFeed, ReplayFeed
 from .live import LiveTrader, LiveUpdate, candle_feed, run_live
 from .risk import RiskManager
 from .strategies import BreakoutStrategy, MeanReversionStrategy, TrendEmaStrategy
@@ -31,6 +32,8 @@ __all__ = [
     "LiveUpdate",
     "candle_feed",
     "run_live",
+    "ReplayFeed",
+    "CcxtLiveFeed",
     "equity_curve_ascii",
     "generate_regime_candles",
     "compare_across_datasets",

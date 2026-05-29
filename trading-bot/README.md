@@ -56,6 +56,7 @@ python3 examples/fetch_yfinance.py AAPL 60d 5m   # baixa, testa e valida
 | `bot/validation.py` | **Anti-overfitting:** treino/teste, walk-forward, comparador, robustez entre regimes |
 | `bot/chart.py` | Curva de capital em ASCII (ver os drawdowns sem libs) |
 | `bot/live.py` | Paper trading **ao vivo**: candle a candle, sem lookahead |
+| `bot/feeds.py` | Fontes de candles: replay e **feed real** de corretora (ccxt) |
 | `bot/sources/` | Adaptadores de dados reais (ex.: `yfinance` para ações) |
 | `bot/indicators.py` | EMA, RSI, ATR em Python puro |
 | `bot/data.py` | Candles: gerador sintético + leitor de CSV |
@@ -102,10 +103,11 @@ Lições:
 - [~] **Fase 3 — Buscar a vantagem:** 4 estratégias (EMA+RSI, Breakout,
       Reversão à média, EMA+tendência) + comparador que ranqueia por robustez
       fora-da-amostra. Falta rodar nos **dados reais** e iterar com features novas.
-- [~] **Fase 4 — Paper trading ao vivo:** motor `live.py` que consome candles
-      um a um (sem lookahead), aplica o mesmo risco e zera no fim do dia. Falta
-      plugar um feed REAL (websocket da corretora) no lugar do feed simulado.
-- [ ] **Fase 4 ao vivo de verdade:** rodar em tempo real com dinheiro
+- [x] **Fase 4 — Paper trading ao vivo:** motor `live.py` (candle a candle, sem
+      lookahead) + adaptador de **feed real** de corretora em `feeds.py`
+      (`CcxtLiveFeed`, entrega só candles fechados). Veja `examples/run_live_ccxt.py`.
+- [ ] **Fase 5 — Dinheiro real:** trocar o PaperBroker por um broker que envie
+      ordens de verdade (mesma interface open/update/close), com extrema cautela
       fictício por semanas
 - [ ] **Fase 5 — Go-live mínimo:** só depois de provado, capital pequeno,
       escalando com evidência
