@@ -73,6 +73,50 @@ def generate_synthetic_candles(
     return candles
 
 
+def generate_regime_candles(
+    regime: str = "bull",
+    n_days: int = 120,
+    bars_per_day: int = 80,
+    seed: int = 42,
+) -> list[Candle]:
+    """Gera candles com um regime de mercado dominante.
+
+    ``regime``: "bull" (alta), "bear" (baixa) ou "sideways" (lateral).
+
+    Por que isso importa: uma estrategia que so ganha em mercado de alta NAO
+    tem vantagem -- so esta "torcendo" pela maré. O teste de verdade e: ela
+    sobrevive nos TRES regimes? Use junto de compare_across_datasets().
+    """
+    drift_by_regime = {
+        "bull": (0.0010, 0.0030),
+        "bear": (-0.0030, -0.0010),
+        "sideways": (-0.0006, 0.0006),
+    }
+    if regime not in drift_by_regime:
+        raise ValueError(f"regime invalido: {regime!r}")
+    lo, hi = drift_by_regime[regime]
+
+    rnd = random.Random(seed)
+    candles: list[Candle] = []
+    price = 120_000.0
+    daily_vol = 0.018
+    bar_vol = daily_vol / math.sqrt(bars_per_day)
+    midnight = 1_700_000_000 - (1_700_000_000 % 86_400)
+    for d in range(n_days):
+        day_base = midnight + d * 86_400 + 9 * 3600
+        drift = rnd.uniform(lo, hi)
+        for b in range(bars_per_day):
+            ret = rnd.gauss(drift / bars_per_day, bar_vol)
+            new = max(1.0, price * (1.0 + ret))
+            o, c = price, new
+            up = max(o, c) * (1.0 + abs(rnd.gauss(0, bar_vol * 0.5)))
+            dn = min(o, c) * (1.0 - abs(rnd.gauss(0, bar_vol * 0.5)))
+            candles.append(Candle(day_base + b * 300, o, up, dn, c, rnd.uniform(100, 1000)))
+            price = new
+        price = max(1.0, price * (1.0 + rnd.gauss(0, bar_vol)))
+    return candles
+
+
 def load_candles_csv(path: str) -> list[Candle]:
     """Le candles de um CSV com colunas: ts,open,high,low,close,volume.
 

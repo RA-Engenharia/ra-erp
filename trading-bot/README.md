@@ -30,6 +30,7 @@ python3 -m unittest discover -s tests   # roda os testes
 python3 examples/run_backtest.py        # backtest em simulação
 python3 examples/run_validation.py      # validação anti-overfitting (offline)
 python3 examples/compare_strategies.py  # compara 4 estratégias (offline)
+python3 examples/regime_robustness.py   # alta/baixa/lateral + curva de capital
 ```
 
 Com dados **reais** de ações (na sua máquina, com internet):
@@ -51,7 +52,8 @@ python3 examples/fetch_yfinance.py AAPL 60d 5m   # baixa, testa e valida
 | `bot/strategies.py` | Candidatas: Breakout, Reversão à média, EMA+tendência |
 | `bot/broker.py` | Corretora simulada com **custos e slippage reais** |
 | `bot/backtest.py` | Motor de backtest + métricas ajustadas ao risco |
-| `bot/validation.py` | **Anti-overfitting:** treino/teste, walk-forward, comparador |
+| `bot/validation.py` | **Anti-overfitting:** treino/teste, walk-forward, comparador, robustez entre regimes |
+| `bot/chart.py` | Curva de capital em ASCII (ver os drawdowns sem libs) |
 | `bot/sources/` | Adaptadores de dados reais (ex.: `yfinance` para ações) |
 | `bot/indicators.py` | EMA, RSI, ATR em Python puro |
 | `bot/data.py` | Candles: gerador sintético + leitor de CSV |

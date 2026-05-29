@@ -263,6 +263,81 @@ def compare_strategies(
     return rows
 
 
+@dataclass
+class RegimeRow:
+    name: str
+    per_dataset: dict[str, ComparisonRow]
+    total_folds_positive: int
+    total_folds: int
+
+    @property
+    def fraction_positive(self) -> float:
+        return self.total_folds_positive / self.total_folds if self.total_folds else 0.0
+
+
+def compare_across_datasets(
+    datasets: dict[str, list[Candle]],
+    settings: Settings,
+    specs: list[StrategySpec],
+    n_folds: int = 3,
+    metric: str = "expectancy",
+    min_trades: int = 8,
+) -> list[RegimeRow]:
+    """Roda a comparacao em VARIOS conjuntos (ex.: regimes de mercado) e agrega.
+
+    O ranque final premia a estrategia que e robusta em TODOS os cenarios, nao
+    a que arrebenta em um e quebra nos outros. Esse e o filtro que separa
+    vantagem real de sorte com a maré.
+    """
+    by_strategy: dict[str, RegimeRow] = {
+        spec.name: RegimeRow(spec.name, {}, 0, 0) for spec in specs
+    }
+    for label, candles in datasets.items():
+        rows = compare_strategies(candles, settings, specs, n_folds, 0.7, metric, min_trades)
+        for r in rows:
+            agg = by_strategy[r.name]
+            agg.per_dataset[label] = r
+            agg.total_folds_positive += r.folds_positive
+            agg.total_folds += r.n_folds
+    result = list(by_strategy.values())
+    result.sort(key=lambda r: r.fraction_positive, reverse=True)
+    return result
+
+
+def format_regime_report(rows: list[RegimeRow], datasets: list[str]) -> str:
+    header = f"  {'Estrategia':<22} " + " ".join(f"{d[:8]:>9}" for d in datasets) + "   TOTAL"
+    lines = [
+        "=" * (len(header) + 2),
+        "  ROBUSTEZ ENTRE REGIMES (folds positivos por cenario)",
+        "=" * (len(header) + 2),
+        header,
+        "-" * (len(header) + 2),
+    ]
+    for r in rows:
+        cells = []
+        for d in datasets:
+            cr = r.per_dataset.get(d)
+            cells.append(f"{cr.folds_positive}/{cr.n_folds}" if cr else "-")
+        cells_str = " ".join(f"{c:>9}" for c in cells)
+        lines.append(
+            f"  {r.name:<22} {cells_str}   "
+            f"{r.total_folds_positive}/{r.total_folds} ({r.fraction_positive:.0%})"
+        )
+    lines.append("=" * (len(header) + 2))
+    if rows and rows[0].fraction_positive > 0.5:
+        lines.append(
+            f"  '{rows[0].name}' foi a mais consistente entre cenarios. "
+            "Confirme em dados reais antes de qualquer aposta."
+        )
+    else:
+        lines.append(
+            "  Nenhuma estrategia se mostrou robusta na maioria dos cenarios. "
+            "Sem vantagem comprovada -- nao arrisque dinheiro real."
+        )
+    lines.append("=" * (len(header) + 2))
+    return "\n".join(lines)
+
+
 def format_comparison(rows: list[ComparisonRow]) -> str:
     lines = [
         "=" * 70,
