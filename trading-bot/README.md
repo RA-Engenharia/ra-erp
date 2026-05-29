@@ -29,6 +29,7 @@ cd trading-bot
 python3 -m unittest discover -s tests   # roda os testes
 python3 examples/run_backtest.py        # backtest em simulação
 python3 examples/run_validation.py      # validação anti-overfitting (offline)
+python3 examples/compare_strategies.py  # compara 4 estratégias (offline)
 ```
 
 Com dados **reais** de ações (na sua máquina, com internet):
@@ -46,10 +47,11 @@ python3 examples/fetch_yfinance.py AAPL 60d 5m   # baixa, testa e valida
 |---|---|
 | `bot/config.py` | **Parâmetros de risco** (o arquivo mais importante) |
 | `bot/risk.py` | **O coração:** tamanho de posição + travas de risco |
-| `bot/strategy.py` | Sinais de entrada/saída (EMA + RSI + ATR) — trocável |
+| `bot/strategy.py` | Estratégia base + EMA+RSI (padrão) — trocável |
+| `bot/strategies.py` | Candidatas: Breakout, Reversão à média, EMA+tendência |
 | `bot/broker.py` | Corretora simulada com **custos e slippage reais** |
 | `bot/backtest.py` | Motor de backtest + métricas ajustadas ao risco |
-| `bot/validation.py` | **Anti-overfitting:** treino/teste + walk-forward |
+| `bot/validation.py` | **Anti-overfitting:** treino/teste, walk-forward, comparador |
 | `bot/sources/` | Adaptadores de dados reais (ex.: `yfinance` para ações) |
 | `bot/indicators.py` | EMA, RSI, ATR em Python puro |
 | `bot/data.py` | Candles: gerador sintético + leitor de CSV |
@@ -93,8 +95,9 @@ Lições:
 - [x] **Fase 1 — Fundação:** motor de risco + backtest + paper trading (offline)
 - [x] **Fase 2 — Dados reais + validação:** adaptador `yfinance` (ações EUA) e
       motor anti-overfitting (treino/teste + walk-forward)
-- [ ] **Fase 3 — Buscar a vantagem:** novas estratégias e features, sempre
-      aprovadas pela validação fora-da-amostra (a maioria dos folds positiva)
+- [~] **Fase 3 — Buscar a vantagem:** 4 estratégias (EMA+RSI, Breakout,
+      Reversão à média, EMA+tendência) + comparador que ranqueia por robustez
+      fora-da-amostra. Falta rodar nos **dados reais** e iterar com features novas.
 - [ ] **Fase 4 — Paper trading ao vivo:** rodar em tempo real com dinheiro
       fictício por semanas
 - [ ] **Fase 5 — Go-live mínimo:** só depois de provado, capital pequeno,

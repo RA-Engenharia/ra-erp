@@ -18,19 +18,31 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from itertools import product
+from typing import Callable
 
 from .backtest import BacktestResult, run_backtest
 from .config import Settings
 from .data import Candle
-from .strategy import EmaRsiAtrStrategy
+from .strategy import EmaRsiAtrStrategy, Strategy
+
+# Uma "fabrica de estrategia": recebe um dict de parametros e devolve a
+# estrategia ja configurada. Permite validar QUALQUER estrategia, nao so a EMA.
+StrategyFactory = Callable[[dict], Strategy]
+
+
+def _default_factory(settings: Settings) -> StrategyFactory:
+    return lambda params: EmaRsiAtrStrategy(replace(settings.strategy, **params))
 
 
 def evaluate_params(
-    candles: list[Candle], settings: Settings, params: dict
+    candles: list[Candle],
+    settings: Settings,
+    params: dict,
+    make_strategy: StrategyFactory | None = None,
 ) -> tuple[dict, BacktestResult]:
-    """Roda um backtest com a StrategyConfig sobrescrita por ``params``."""
-    scfg = replace(settings.strategy, **params)
-    result = run_backtest(candles, EmaRsiAtrStrategy(scfg), settings)
+    """Roda um backtest com os ``params`` aplicados via ``make_strategy``."""
+    factory = make_strategy or _default_factory(settings)
+    result = run_backtest(candles, factory(params), settings)
     return result.metrics, result
 
 
@@ -47,6 +59,7 @@ def grid_search(
     grid: dict[str, list],
     metric: str = "expectancy",
     min_trades: int = 10,
+    make_strategy: StrategyFactory | None = None,
 ) -> GridResult | None:
     """Busca em grade os melhores parametros SEGUNDO ``metric`` (in-sample).
 
@@ -63,7 +76,7 @@ def grid_search(
             and params["ema_fast"] >= params["ema_slow"]
         ):
             continue
-        metrics, _ = evaluate_params(candles, settings, params)
+        metrics, _ = evaluate_params(candles, settings, params, make_strategy)
         if metrics.get("n_trades", 0) < min_trades:
             continue
         score = metrics.get(metric, float("-inf"))
@@ -86,14 +99,15 @@ def train_test(
     train_frac: float = 0.7,
     metric: str = "expectancy",
     min_trades: int = 10,
+    make_strategy: StrategyFactory | None = None,
 ) -> SplitResult | None:
     """Otimiza no treino, mede no teste. A diferenca expoe o overfitting."""
     split = int(len(candles) * train_frac)
     train, test = candles[:split], candles[split:]
-    best = grid_search(train, settings, grid, metric, min_trades)
+    best = grid_search(train, settings, grid, metric, min_trades, make_strategy)
     if best is None:
         return None
-    oos_metrics, _ = evaluate_params(test, settings, best.params)
+    oos_metrics, _ = evaluate_params(test, settings, best.params, make_strategy)
     return SplitResult(best.params, best.metrics, oos_metrics)
 
 
@@ -112,6 +126,7 @@ def walk_forward(
     n_folds: int = 4,
     metric: str = "expectancy",
     min_trades: int = 8,
+    make_strategy: StrategyFactory | None = None,
 ) -> list[WalkForwardFold]:
     """Walk-forward de janela expansiva.
 
@@ -127,10 +142,10 @@ def walk_forward(
     for k in range(1, n_folds + 1):
         train = candles[: block * k]
         test = candles[block * k : block * (k + 1)]
-        best = grid_search(train, settings, grid, metric, min_trades)
+        best = grid_search(train, settings, grid, metric, min_trades, make_strategy)
         if best is None:
             continue
-        oos_metrics, _ = evaluate_params(test, settings, best.params)
+        oos_metrics, _ = evaluate_params(test, settings, best.params, make_strategy)
         folds.append(WalkForwardFold(k, best.params, best.metrics, oos_metrics))
     return folds
 
@@ -193,4 +208,84 @@ def format_walk_forward_report(folds: list[WalkForwardFold]) -> str:
         "  Regra de ouro: so leve adiante se a maioria dos folds for positiva."
     )
     lines.append("=" * 64)
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Comparacao de varias estrategias pelo juiz imparcial (walk-forward)
+# ---------------------------------------------------------------------------
+@dataclass
+class StrategySpec:
+    """Uma estrategia candidata: como construi-la + seu espaco de busca."""
+
+    name: str
+    make: StrategyFactory
+    grid: dict[str, list]
+
+
+@dataclass
+class ComparisonRow:
+    name: str
+    split: SplitResult | None
+    folds: list[WalkForwardFold]
+    avg_oos_expectancy: float
+    folds_positive: int
+    n_folds: int
+
+
+def compare_strategies(
+    candles: list[Candle],
+    settings: Settings,
+    specs: list[StrategySpec],
+    n_folds: int = 4,
+    train_frac: float = 0.7,
+    metric: str = "expectancy",
+    min_trades: int = 8,
+) -> list[ComparisonRow]:
+    """Roda treino/teste + walk-forward para cada estrategia e ranqueia.
+
+    Criterio de ranque: robustez fora-da-amostra (mais folds positivos primeiro,
+    depois maior expectancia OOS media). E o resultado honesto que importa.
+    """
+    rows: list[ComparisonRow] = []
+    for spec in specs:
+        split = train_test(
+            candles, settings, spec.grid, train_frac, metric, min_trades, spec.make
+        )
+        folds = walk_forward(
+            candles, settings, spec.grid, n_folds, metric, min_trades, spec.make
+        )
+        oos = [f.out_of_sample.get("expectancy", 0.0) for f in folds]
+        avg = sum(oos) / len(oos) if oos else float("-inf")
+        positive = sum(1 for e in oos if e > 0)
+        rows.append(ComparisonRow(spec.name, split, folds, avg, positive, len(folds)))
+    rows.sort(key=lambda r: (r.folds_positive, r.avg_oos_expectancy), reverse=True)
+    return rows
+
+
+def format_comparison(rows: list[ComparisonRow]) -> str:
+    lines = [
+        "=" * 70,
+        "  COMPARACAO DE ESTRATEGIAS (ranqueadas por robustez fora-da-amostra)",
+        "=" * 70,
+        f"  {'#':<2} {'Estrategia':<22} {'folds+':<8} {'exp OOS media':<14}",
+        "-" * 70,
+    ]
+    for i, r in enumerate(rows, 1):
+        lines.append(
+            f"  {i:<2} {r.name:<22} {f'{r.folds_positive}/{r.n_folds}':<8} "
+            f"R$ {r.avg_oos_expectancy:+8.2f}"
+        )
+    lines.append("=" * 70)
+    if rows and rows[0].folds_positive > rows[0].n_folds / 2:
+        lines.append(
+            f"  Candidata mais promissora: '{rows[0].name}'. "
+            "Ainda assim, valide com paper trading antes de dinheiro real."
+        )
+    else:
+        lines.append(
+            "  Nenhuma estrategia passou no teste de robustez (maioria dos folds "
+            "positiva). NAO opere com dinheiro real -- ainda nao ha vantagem."
+        )
+    lines.append("=" * 70)
     return "\n".join(lines)

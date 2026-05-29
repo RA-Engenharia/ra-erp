@@ -8,10 +8,22 @@ from .broker import PaperBroker, Trade
 from .config import CostConfig, RiskConfig, Settings, StrategyConfig
 from .data import Candle, generate_synthetic_candles, load_candles_csv
 from .risk import RiskManager
+from .strategies import BreakoutStrategy, MeanReversionStrategy, TrendEmaStrategy
 from .strategy import EmaRsiAtrStrategy, Signal, Strategy
-from .validation import grid_search, train_test, walk_forward
+from .validation import (
+    StrategySpec,
+    compare_strategies,
+    grid_search,
+    train_test,
+    walk_forward,
+)
 
 __all__ = [
+    "BreakoutStrategy",
+    "MeanReversionStrategy",
+    "TrendEmaStrategy",
+    "StrategySpec",
+    "compare_strategies",
     "grid_search",
     "train_test",
     "walk_forward",
