@@ -31,6 +31,7 @@ python3 examples/run_backtest.py        # backtest em simulação
 python3 examples/run_validation.py      # validação anti-overfitting (offline)
 python3 examples/compare_strategies.py  # compara 4 estratégias (offline)
 python3 examples/regime_robustness.py   # alta/baixa/lateral + curva de capital
+python3 examples/run_live.py            # paper trading "ao vivo" (feed simulado)
 ```
 
 Com dados **reais** de ações (na sua máquina, com internet):
@@ -54,6 +55,7 @@ python3 examples/fetch_yfinance.py AAPL 60d 5m   # baixa, testa e valida
 | `bot/backtest.py` | Motor de backtest + métricas ajustadas ao risco |
 | `bot/validation.py` | **Anti-overfitting:** treino/teste, walk-forward, comparador, robustez entre regimes |
 | `bot/chart.py` | Curva de capital em ASCII (ver os drawdowns sem libs) |
+| `bot/live.py` | Paper trading **ao vivo**: candle a candle, sem lookahead |
 | `bot/sources/` | Adaptadores de dados reais (ex.: `yfinance` para ações) |
 | `bot/indicators.py` | EMA, RSI, ATR em Python puro |
 | `bot/data.py` | Candles: gerador sintético + leitor de CSV |
@@ -100,7 +102,10 @@ Lições:
 - [~] **Fase 3 — Buscar a vantagem:** 4 estratégias (EMA+RSI, Breakout,
       Reversão à média, EMA+tendência) + comparador que ranqueia por robustez
       fora-da-amostra. Falta rodar nos **dados reais** e iterar com features novas.
-- [ ] **Fase 4 — Paper trading ao vivo:** rodar em tempo real com dinheiro
+- [~] **Fase 4 — Paper trading ao vivo:** motor `live.py` que consome candles
+      um a um (sem lookahead), aplica o mesmo risco e zera no fim do dia. Falta
+      plugar um feed REAL (websocket da corretora) no lugar do feed simulado.
+- [ ] **Fase 4 ao vivo de verdade:** rodar em tempo real com dinheiro
       fictício por semanas
 - [ ] **Fase 5 — Go-live mínimo:** só depois de provado, capital pequeno,
       escalando com evidência
