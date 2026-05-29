@@ -13,7 +13,15 @@ from .data import (
     generate_synthetic_candles,
     load_candles_csv,
 )
+from .brain import (
+    EnsembleStrategy,
+    Member,
+    MemberDiagnostic,
+    build_brain,
+    format_brain_report,
+)
 from .feeds import CcxtLiveFeed, ReplayFeed
+from .sources import DataSourceConfig, build_feed
 from .live import LiveTrader, LiveUpdate, candle_feed, run_live
 from .risk import RiskManager
 from .strategies import (
@@ -40,6 +48,13 @@ __all__ = [
     "run_live",
     "ReplayFeed",
     "CcxtLiveFeed",
+    "DataSourceConfig",
+    "build_feed",
+    "EnsembleStrategy",
+    "Member",
+    "MemberDiagnostic",
+    "build_brain",
+    "format_brain_report",
     "equity_curve_ascii",
     "generate_regime_candles",
     "compare_across_datasets",

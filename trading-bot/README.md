@@ -32,7 +32,23 @@ python3 examples/run_validation.py      # validação anti-overfitting (offline)
 python3 examples/compare_strategies.py  # compara 4 estratégias (offline)
 python3 examples/regime_robustness.py   # alta/baixa/lateral + curva de capital
 python3 examples/run_live.py            # paper trading "ao vivo" (feed simulado)
+python3 examples/run_brain.py           # cérebro: combina TODAS as estratégias
 ```
+
+### O "cérebro central" (ensemble)
+
+`bot/brain.py` junta todas as estratégias num **comitê**. Antes de operar, ele
+**analisa cada uma no walk-forward** e só dá direito de voto às que provaram
+vantagem fora-da-amostra (peso proporcional aos folds positivos). Depois, só
+abre operação quando há **consenso** (maioria do peso concorda na direção).
+
+> **Importante e honesto:** se nenhuma estratégia for robusta, todos os votos
+> são zero e o cérebro **fica parado** — não opera, não arrisca capital. Não
+> existe "operar sem risco"; o mais perto disso é **não operar sem vantagem
+> comprovada**, e é exatamente o que o cérebro impõe.
+
+Para alimentá-lo em tempo real, descreva a fonte com `DataSourceConfig`
+(provider `ccxt`/`yfinance`/`csv`/`replay`) e use `build_feed(config)`.
 
 Com dados **reais** de ações (na sua máquina, com internet):
 
@@ -57,6 +73,8 @@ python3 examples/fetch_yfinance.py AAPL 60d 5m   # baixa, testa e valida
 | `bot/chart.py` | Curva de capital em ASCII (ver os drawdowns sem libs) |
 | `bot/live.py` | Paper trading **ao vivo**: candle a candle, sem lookahead |
 | `bot/feeds.py` | Fontes de candles: replay e **feed real** de corretora (ccxt) |
+| `bot/brain.py` | **Cérebro central:** comitê que combina todas as estratégias por voto |
+| `bot/sources/` | `DataSourceConfig` + `build_feed`: parâmetros de coleta em tempo real |
 | `bot/sources/` | Adaptadores de dados reais (ex.: `yfinance` para ações) |
 | `bot/indicators.py` | EMA, RSI, ATR em Python puro |
 | `bot/data.py` | Candles: gerador sintético + leitor de CSV |
