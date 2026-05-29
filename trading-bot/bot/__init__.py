@@ -24,6 +24,7 @@ from .feeds import CcxtLiveFeed, ReplayFeed
 from .sources import DataSourceConfig, build_feed
 from .live import LiveTrader, LiveUpdate, candle_feed, run_live
 from .risk import RiskManager
+from .scanner import ScanResult, format_scan, scan_candles
 from .strategies import (
     BollingerStrategy,
     BreakoutStrategy,
@@ -55,6 +56,9 @@ __all__ = [
     "MemberDiagnostic",
     "build_brain",
     "format_brain_report",
+    "ScanResult",
+    "scan_candles",
+    "format_scan",
     "equity_curve_ascii",
     "generate_regime_candles",
     "compare_across_datasets",
