@@ -30,6 +30,7 @@ from .strategies import (
     BreakoutStrategy,
     MacdStrategy,
     MeanReversionStrategy,
+    RegimeFilteredStrategy,
     TrendEmaStrategy,
 )
 from .strategy import EmaRsiAtrStrategy, Signal, Strategy
@@ -67,6 +68,7 @@ __all__ = [
     "TrendEmaStrategy",
     "MacdStrategy",
     "BollingerStrategy",
+    "RegimeFilteredStrategy",
     "StrategySpec",
     "compare_strategies",
     "grid_search",

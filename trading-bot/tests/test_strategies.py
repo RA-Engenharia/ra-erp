@@ -16,8 +16,10 @@ from bot.strategies import (  # noqa: E402
     BreakoutStrategy,
     MacdStrategy,
     MeanReversionStrategy,
+    RegimeFilteredStrategy,
     TrendEmaStrategy,
 )
+from bot.strategy import Signal, Strategy  # noqa: E402
 from bot.chart import equity_curve_ascii  # noqa: E402
 from bot.data import generate_regime_candles  # noqa: E402
 from bot.validation import (  # noqa: E402
@@ -65,6 +67,17 @@ class TestNewIndicators(unittest.TestCase):
             if line[i] is not None and sig[i] is not None:
                 self.assertAlmostEqual(hist[i], line[i] - sig[i], places=9)
 
+    def test_efficiency_ratio_bounds(self):
+        # serie perfeitamente direta -> ER = 1 ; serie vai-e-volta -> ER baixo
+        up = list(range(1, 40))
+        er_up = indicators.efficiency_ratio([float(x) for x in up], 10)
+        self.assertAlmostEqual(er_up[20], 1.0, places=9)
+        zig = [10.0 + (1 if k % 2 else -1) for k in range(40)]
+        er_zig = indicators.efficiency_ratio(zig, 10)
+        self.assertLess(er_zig[20], 0.3)
+        for v in er_up[10:]:
+            self.assertTrue(0.0 <= v <= 1.0)
+
     def test_bollinger_bands_order(self):
         closes = [c.close for c in CANDLES]
         mid, up, lo = indicators.bollinger(closes, 20, 2.0)
@@ -73,6 +86,48 @@ class TestNewIndicators(unittest.TestCase):
             if mid[i] is not None:
                 self.assertLessEqual(lo[i], mid[i])
                 self.assertLessEqual(mid[i], up[i])
+
+
+class _AlwaysLong(Strategy):
+    def __init__(self):
+        self.warmup = 0
+
+    def prepare(self, candles):
+        pass
+
+    def signal(self, i):
+        return Signal("long", 90.0, 110.0, "x")
+
+
+class TestRegimeFilter(unittest.TestCase):
+    def test_trend_filter_blocks_in_chop_passes_in_trend(self):
+        # serie em tendencia limpa: ER alto -> filtro 'trend' deixa passar
+        trend_candles = [
+            type(CANDLES[0])(ts=i, open=float(i), high=float(i) + 0.5, low=float(i) - 0.5, close=float(i), volume=1.0)
+            for i in range(1, 60)
+        ]
+        strat = RegimeFilteredStrategy(_AlwaysLong(), mode="trend", er_period=10, er_threshold=0.3)
+        strat.prepare(trend_candles)
+        self.assertEqual(strat.signal(40).action, "long")
+
+        # serie lateral (vai-e-volta): ER baixo -> filtro 'trend' BLOQUEIA
+        chop = []
+        base = type(CANDLES[0])
+        for i in range(60):
+            px = 100.0 + (1 if i % 2 else -1)
+            chop.append(base(ts=i, open=px, high=px + 0.2, low=px - 0.2, close=px, volume=1.0))
+        strat2 = RegimeFilteredStrategy(_AlwaysLong(), mode="trend", er_period=10, er_threshold=0.3)
+        strat2.prepare(chop)
+        self.assertIsNone(strat2.signal(40).action)
+
+    def test_invalid_mode(self):
+        with self.assertRaises(ValueError):
+            RegimeFilteredStrategy(_AlwaysLong(), mode="lol")
+
+    def test_runs_in_backtest(self):
+        wrapped = RegimeFilteredStrategy(BreakoutStrategy(), mode="trend")
+        result = run_backtest(CANDLES, wrapped, SETTINGS)
+        self.assertIn("n_trades", result.metrics)
 
 
 class TestCompareStrategies(unittest.TestCase):

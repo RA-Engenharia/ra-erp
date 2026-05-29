@@ -101,6 +101,48 @@ class MeanReversionStrategy(Strategy):
         return Signal(None)
 
 
+class RegimeFilteredStrategy(Strategy):
+    """Envolve outra estrategia e so a deixa operar no REGIME certo.
+
+    mode="trend": so opera quando a tendencia e forte (ER >= limiar) -- para
+                  estrategias de momentum (breakout, MACD, cruzamento de EMA).
+    mode="range": so opera quando o mercado esta lateral (ER <= limiar) -- para
+                  estrategias de reversao a media (RSI, Bollinger).
+
+    O limiar e fixado a priori (convencao), nao otimizado -- isso evita
+    transformar o filtro em mais uma alavanca de overfitting.
+    """
+
+    def __init__(
+        self,
+        base: Strategy,
+        mode: str = "trend",
+        er_period: int = 10,
+        er_threshold: float = 0.30,
+    ):
+        if mode not in ("trend", "range"):
+            raise ValueError("mode deve ser 'trend' ou 'range'")
+        self.base = base
+        self.mode = mode
+        self.er_period = er_period
+        self.er_threshold = er_threshold
+        self.warmup = max(base.warmup, er_period + 1)
+
+    def prepare(self, candles: list[Candle]) -> None:
+        self.base.prepare(candles)
+        self._er = indicators.efficiency_ratio([c.close for c in candles], self.er_period)
+
+    def signal(self, i: int) -> Signal:
+        er = self._er[i]
+        if er is None:
+            return Signal(None)
+        if self.mode == "trend" and er < self.er_threshold:
+            return Signal(None)  # tendencia fraca demais para momentum
+        if self.mode == "range" and er > self.er_threshold:
+            return Signal(None)  # tendencia forte demais para reversao
+        return self.base.signal(i)
+
+
 class MacdStrategy(Strategy):
     """Cruzamento do MACD: compra quando a linha cruza o sinal para cima.
 

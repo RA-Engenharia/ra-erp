@@ -110,6 +110,27 @@ def bollinger(
     return mid, upper, lower
 
 
+def efficiency_ratio(values: list[float], period: int = 10) -> list[float | None]:
+    """Efficiency Ratio (Kaufman) -- mede FORCA de tendencia, de 0 a 1.
+
+    ER = |variacao liquida no periodo| / (soma das variacoes absolutas).
+      ~1  -> movimento direto e limpo (tendencia forte)
+      ~0  -> vai-e-volta (mercado lateral / ruidoso)
+
+    Base economica para escolher o regime: momentum quer ER alto; reversao a
+    media quer ER baixo. Sem parametro "magico" alem do periodo.
+    """
+    n = len(values)
+    out: list[float | None] = [None] * n
+    if period <= 0:
+        return out
+    for i in range(period, n):
+        change = abs(values[i] - values[i - period])
+        vol = sum(abs(values[k] - values[k - 1]) for k in range(i - period + 1, i + 1))
+        out[i] = (change / vol) if vol > 0 else 0.0
+    return out
+
+
 def atr(
     highs: list[float],
     lows: list[float],
