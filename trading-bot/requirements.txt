@@ -1,13 +1,14 @@
-# Fase 1 (este motor) NAO precisa de nada: roda em Python puro (stdlib).
+# O MOTOR roda em Python puro (stdlib) -- nao precisa de nada para backtest,
+# validacao e o cerebro em dados sinteticos.
 #
-# As dependencias abaixo sao OPCIONAIS, para as proximas fases (dados reais /
-# graficos / execucao ao vivo). Instale apenas quando for usar, num ambiente
-# com internet:
-#
-#   pip install -r requirements.txt
-#
-# ccxt          # dados e execucao em corretoras de cripto (Binance etc.)
-# yfinance      # dados historicos de acoes (gratuito)
+# As linhas ABAIXO sao para DADOS REAIS e execucao ao vivo. O instalador
+# (setup.sh / setup.bat) tenta instala-las; se voce estiver offline, o motor
+# ainda funciona (cai para dados sinteticos).
+
+yfinance        # dados historicos de acoes/ETFs (B3 e EUA) -- gratuito
+ccxt            # dados e (futuramente) execucao em corretoras de cripto
+
+# --- OPCIONAIS (descomente se for usar) ---
 # MetaTrader5   # B3 / mini-indice via MetaTrader 5 (apenas Windows)
-# matplotlib    # graficos da curva de capital
-# pandas        # manipulacao de dados (opcional; o motor nao depende disso)
+# matplotlib    # graficos da curva de capital (alem do grafico ASCII embutido)
+# pandas        # manipulacao de dados (o motor NAO depende disso)

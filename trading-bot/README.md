@@ -35,6 +35,18 @@ python3 examples/run_live.py            # paper trading "ao vivo" (feed simulado
 python3 examples/run_brain.py           # cérebro: combina TODAS as estratégias
 ```
 
+### Instalação automática (recomendado)
+
+Não quer rodar comando por comando? Use o instalador — cria um ambiente
+isolado, instala as dependências e roda os testes:
+
+| Sistema | Instalar (1x) | Rodar |
+|---|---|---|
+| Windows | `setup.bat` (dois cliques) | `run.bat` |
+| Linux/macOS | `bash setup.sh` | `bash run.sh` |
+
+Guia completo passo a passo: [`PRIMEIROS_PASSOS.md`](PRIMEIROS_PASSOS.md).
+
 ### O "cérebro central" (ensemble)
 
 `bot/brain.py` junta todas as estratégias num **comitê**. Antes de operar, ele
