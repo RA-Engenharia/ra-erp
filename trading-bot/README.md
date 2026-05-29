@@ -27,7 +27,15 @@ com **gestão de risco no centro de tudo**. Roda offline, em qualquer máquina.
 ```bash
 cd trading-bot
 python3 -m unittest discover -s tests   # roda os testes
-python3 examples/run_backtest.py        # roda o backtest em simulação
+python3 examples/run_backtest.py        # backtest em simulação
+python3 examples/run_validation.py      # validação anti-overfitting (offline)
+```
+
+Com dados **reais** de ações (na sua máquina, com internet):
+
+```bash
+pip install yfinance
+python3 examples/fetch_yfinance.py AAPL 60d 5m   # baixa, testa e valida
 ```
 
 ---
@@ -41,9 +49,11 @@ python3 examples/run_backtest.py        # roda o backtest em simulação
 | `bot/strategy.py` | Sinais de entrada/saída (EMA + RSI + ATR) — trocável |
 | `bot/broker.py` | Corretora simulada com **custos e slippage reais** |
 | `bot/backtest.py` | Motor de backtest + métricas ajustadas ao risco |
+| `bot/validation.py` | **Anti-overfitting:** treino/teste + walk-forward |
+| `bot/sources/` | Adaptadores de dados reais (ex.: `yfinance` para ações) |
 | `bot/indicators.py` | EMA, RSI, ATR em Python puro |
 | `bot/data.py` | Candles: gerador sintético + leitor de CSV |
-| `tests/` | Testes (o módulo de risco é testado a fundo) |
+| `tests/` | Testes (risco e validação testados a fundo) |
 
 ---
 
@@ -81,10 +91,10 @@ Lições:
 ## Plano (roadmap)
 
 - [x] **Fase 1 — Fundação:** motor de risco + backtest + paper trading (offline)
-- [ ] **Fase 2 — Dados reais:** plugar fonte real (CSV da corretora, ou
-      ccxt/Binance, yfinance, MetaTrader5) via `load_candles_csv` / novo adaptador
-- [ ] **Fase 3 — Buscar a vantagem:** testar/otimizar estratégias com
-      validação fora-da-amostra (evitar overfitting) e walk-forward
+- [x] **Fase 2 — Dados reais + validação:** adaptador `yfinance` (ações EUA) e
+      motor anti-overfitting (treino/teste + walk-forward)
+- [ ] **Fase 3 — Buscar a vantagem:** novas estratégias e features, sempre
+      aprovadas pela validação fora-da-amostra (a maioria dos folds positiva)
 - [ ] **Fase 4 — Paper trading ao vivo:** rodar em tempo real com dinheiro
       fictício por semanas
 - [ ] **Fase 5 — Go-live mínimo:** só depois de provado, capital pequeno,

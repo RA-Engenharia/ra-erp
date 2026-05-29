@@ -23,9 +23,6 @@ class RiskConfig:
     max_total_drawdown_pct: float = 0.20
     # Exposicao maxima (notional) por posicao, como fracao do capital.
     max_position_pct: float = 1.00
-    # Multiplo de ATR para o stop e razao risco:retorno do alvo.
-    stop_atr_mult: float = 1.5
-    reward_risk: float = 1.5
 
     def validate(self) -> None:
         assert self.starting_equity > 0, "capital inicial deve ser > 0"
@@ -34,7 +31,6 @@ class RiskConfig:
         )
         assert 0 < self.max_daily_loss_pct <= 0.20
         assert 0 < self.max_total_drawdown_pct <= 0.50
-        assert self.stop_atr_mult > 0 and self.reward_risk > 0
 
 
 @dataclass
@@ -58,6 +54,9 @@ class StrategyConfig:
     rsi_short_min: float = 30.0
     rsi_short_max: float = 60.0
     allow_short: bool = True
+    # Onde colocar stop e alvo (em multiplos de ATR) -- otimizaveis na validacao.
+    stop_atr_mult: float = 1.5
+    reward_risk: float = 1.5
 
 
 @dataclass

@@ -70,11 +70,11 @@ class EmaRsiAtrStrategy(Strategy):
         price = self._closes[i]
         cross_up = ef_p <= es_p and ef > es
         cross_dn = ef_p >= es_p and ef < es
-        stop_dist = atr_v * 1.5  # stop_atr_mult padrao; risk.py manda no tamanho
+        stop_dist = atr_v * self.cfg.stop_atr_mult  # risk.py manda no tamanho
 
         if cross_up and self.cfg.rsi_long_min <= rsi_v <= self.cfg.rsi_long_max:
             stop = price - stop_dist
-            take = price + stop_dist * 1.5
+            take = price + stop_dist * self.cfg.reward_risk
             return Signal("long", stop, take, f"cross_up rsi={rsi_v:.0f}")
 
         if (
@@ -83,7 +83,7 @@ class EmaRsiAtrStrategy(Strategy):
             and self.cfg.rsi_short_min <= rsi_v <= self.cfg.rsi_short_max
         ):
             stop = price + stop_dist
-            take = price - stop_dist * 1.5
+            take = price - stop_dist * self.cfg.reward_risk
             return Signal("short", stop, take, f"cross_dn rsi={rsi_v:.0f}")
 
         return Signal(None)
