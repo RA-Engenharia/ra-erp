@@ -69,3 +69,52 @@ def load_yfinance(
         )
     candles.sort(key=lambda c: c.ts)
     return candles
+
+
+class YFinanceLiveFeed:
+    """Feed 'ao vivo' de acoes via yfinance (preco real, com atraso).
+
+    Importante e honesto: o yfinance NAO e tempo-real de verdade -- os dados sao
+    atrasados (~15 min) e so atualizam no horario do pregao. Para PAPER TRADING
+    e ensaio isso serve; para execucao real seria preciso um feed de corretora
+    (ex.: MetaTrader 5). Usa a mesma interface .stream() do CcxtLiveFeed.
+
+    A cada poll baixa o historico recente e entrega so candles JA FECHADOS
+    (descarta o ultimo, que ainda se forma), sem repetir. O primeiro poll ja
+    entrega o historico (catch-up) para o robo aquecer.
+    """
+
+    def __init__(
+        self,
+        symbol: str = "PETR4.SA",
+        interval: str = "1h",
+        period: str = "60d",
+        poll_seconds: float = 300.0,
+        max_candles: int | None = None,
+        loader=None,
+        sleep=None,
+    ):
+        import time
+
+        self.symbol = symbol
+        self.interval = interval
+        self.period = period
+        self.poll_seconds = poll_seconds
+        self.max_candles = max_candles
+        self._loader = loader or (lambda: load_yfinance(symbol, period, interval))
+        self._sleep = sleep or time.sleep
+        self._last_ts = 0
+
+    def stream(self):
+        emitted = 0
+        while True:
+            candles = self._loader() or []
+            closed = candles[:-1] if len(candles) >= 1 else []
+            for c in closed:
+                if c.ts > self._last_ts:
+                    self._last_ts = c.ts
+                    emitted += 1
+                    yield c
+                    if self.max_candles is not None and emitted >= self.max_candles:
+                        return
+            self._sleep(self.poll_seconds)

@@ -67,6 +67,16 @@ def build_feed(config: DataSourceConfig, candles: list[Candle] | None = None):
 
         data = load_yfinance(config.symbol, config.yf_period, config.yf_interval)
         return ReplayFeed(data, config.delay)
+    if config.provider == "yfinance_live":
+        from .yfinance_source import YFinanceLiveFeed
+
+        return YFinanceLiveFeed(
+            symbol=config.symbol,
+            interval=config.yf_interval,
+            period=config.yf_period,
+            poll_seconds=config.poll_seconds,
+            max_candles=config.max_candles,
+        )
     if config.provider == "csv":
         if not config.csv_path:
             raise ValueError("provider 'csv' exige csv_path na config.")

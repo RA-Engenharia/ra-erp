@@ -30,6 +30,26 @@ class TestReplayFeed(unittest.TestCase):
         self.assertEqual(len(updates), len(candles))
 
 
+class TestYFinanceLiveFeed(unittest.TestCase):
+    def test_emits_closed_candles_no_dup(self):
+        from bot.data import Candle
+        from bot.sources.yfinance_source import YFinanceLiveFeed
+
+        base = generate_synthetic_candles(n_days=3, seed=1)
+        snapshot = base[:10]  # o feed sempre ve estes 10; o 10o esta "se formando"
+
+        feed = YFinanceLiveFeed(
+            loader=lambda: list(snapshot), poll_seconds=0, max_candles=9, sleep=lambda _s: None
+        )
+        got = list(feed.stream())
+        ts = [c.ts for c in got]
+        self.assertEqual(ts, sorted(ts))                # em ordem
+        self.assertEqual(len(ts), len(set(ts)))         # sem duplicatas
+        self.assertNotIn(snapshot[9].ts, ts)            # o ultimo (em formacao) NAO sai
+        self.assertEqual(len(ts), 9)                    # so os 9 fechados
+        self.assertIsInstance(got[0], Candle)
+
+
 class TestCcxtLiveFeed(unittest.TestCase):
     def test_only_closed_candles_no_duplicates(self):
         # duas "rodadas" de polling; o ULTIMO de cada rodada esta se formando

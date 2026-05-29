@@ -42,8 +42,11 @@ isolado, instala as dependências e roda os testes:
 
 | Sistema | Instalar (1x) | Rodar |
 |---|---|---|
-| Windows | `setup.bat` (dois cliques) | `run.bat` |
+| Windows | `setup.bat` (dois cliques) | `run.bat` / `live_brain.bat` |
 | Linux/macOS | `bash setup.sh` | `bash run.sh` |
+
+`live_brain.bat` roda o **paper trading ao vivo** do cérebro (ordens simuladas,
+preços reais) — a etapa de ensaio antes de qualquer dinheiro real.
 
 Guia completo passo a passo: [`PRIMEIROS_PASSOS.md`](PRIMEIROS_PASSOS.md).
 
