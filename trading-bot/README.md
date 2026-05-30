@@ -47,6 +47,8 @@ isolado, instala as dependências e roda os testes:
 
 `live_brain.bat` roda o **paper trading ao vivo** do cérebro (ordens simuladas,
 preços reais) — a etapa de ensaio antes de qualquer dinheiro real.
+`monitor.bat` mostra o **painel** do ensaio (acertos, fator de lucro, drawdown,
+curva de capital) lendo o log de operações simuladas.
 
 Guia completo passo a passo: [`PRIMEIROS_PASSOS.md`](PRIMEIROS_PASSOS.md).
 
