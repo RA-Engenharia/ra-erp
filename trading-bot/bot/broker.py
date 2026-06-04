@@ -24,6 +24,7 @@ class Position:
     stop: float
     take: float
     commission_open: float
+    entry_ts: int = 0
 
     @property
     def direction(self) -> int:
@@ -62,12 +63,22 @@ class PaperBroker:
         return abs(notional) * self.costs.commission_pct
 
     # --- ordens ----------------------------------------------------------
-    def open(self, side: str, qty: float, price: float, stop: float, take: float) -> None:
+    def open(
+        self, side: str, qty: float, price: float, stop: float, take: float, ts: int = 0
+    ) -> None:
         assert self.position is None, "ja existe posicao aberta"
         assert side in ("long", "short")
         fill = self._fill_price(price, side, opening=True)
         comm = self._commission(fill * qty)
-        self.position = Position(side, qty, fill, stop, take, comm)
+        self.position = Position(side, qty, fill, stop, take, comm, ts)
+
+    def _borrow_cost(self, pos: Position, ts: int) -> float:
+        """Custo de aluguel para shorts, proporcional aos dias segurados."""
+        rate = self.costs.short_borrow_annual_pct
+        if pos.side != "short" or rate <= 0 or pos.entry_ts <= 0:
+            return 0.0
+        days = max(0.0, (ts - pos.entry_ts) / 86_400.0)
+        return pos.entry * pos.qty * rate * days / 365.0
 
     def _close_at(self, price: float, reason: str, ts: int) -> Trade:
         pos = self.position
@@ -75,7 +86,7 @@ class PaperBroker:
         fill = self._fill_price(price, pos.side, opening=False)
         comm_close = self._commission(fill * pos.qty)
         gross = (fill - pos.entry) * pos.qty * pos.direction
-        pnl = gross - pos.commission_open - comm_close
+        pnl = gross - pos.commission_open - comm_close - self._borrow_cost(pos, ts)
         trade = Trade(
             side=pos.side,
             qty=pos.qty,
@@ -83,7 +94,7 @@ class PaperBroker:
             exit=fill,
             pnl=pnl,
             reason=reason,
-            entry_ts=0,
+            entry_ts=pos.entry_ts,
             exit_ts=ts,
         )
         self.position = None

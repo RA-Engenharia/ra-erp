@@ -91,7 +91,7 @@ class LiveTrader:
                 if sig.action in ("long", "short"):
                     qty = self.risk.position_size(c.close, sig.stop)
                     if qty > 0:
-                        self.broker.open(sig.action, qty, c.close, sig.stop, sig.take)
+                        self.broker.open(sig.action, qty, c.close, sig.stop, sig.take, c.ts)
                         events.append(f"entrada_{sig.action}")
             elif reason:
                 events.append(f"bloqueado:{reason}")

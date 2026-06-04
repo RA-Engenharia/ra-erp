@@ -186,6 +186,33 @@ class TestBearStrategies(unittest.TestCase):
             self.assertGreater(result.metrics["n_trades"], 0, cls.__name__)
 
 
+class TestBorrowCost(unittest.TestCase):
+    def test_short_borrow_charged_by_days(self):
+        from bot.broker import PaperBroker
+        from bot.config import CostConfig
+
+        # sem comissao/slippage para isolar o aluguel; 36.5%/ano = 0.1%/dia
+        costs = CostConfig(commission_pct=0.0, slippage_pct=0.0, short_borrow_annual_pct=0.365)
+        b = PaperBroker(costs)
+        entry_ts = 1_000_000
+        b.open("short", 100, 50.0, 60.0, 40.0, ts=entry_ts)
+        # fecha 10 dias depois no MESMO preco -> lucro bruto 0, so o aluguel
+        t = b.close(50.0, entry_ts + 10 * 86_400, "x")
+        # aluguel = 50 * 100 * 0.365 * 10/365 = 50
+        self.assertAlmostEqual(t.pnl, -50.0, places=6)
+
+    def test_long_has_no_borrow(self):
+        from bot.broker import PaperBroker
+        from bot.config import CostConfig
+
+        costs = CostConfig(commission_pct=0.0, slippage_pct=0.0, short_borrow_annual_pct=0.365)
+        b = PaperBroker(costs)
+        entry_ts = 1_000_000
+        b.open("long", 100, 50.0, 40.0, 60.0, ts=entry_ts)
+        t = b.close(50.0, entry_ts + 10 * 86_400, "x")
+        self.assertAlmostEqual(t.pnl, 0.0, places=6)  # comprado nao paga aluguel
+
+
 class TestSwingMode(unittest.TestCase):
     def test_swing_has_no_eod_exits(self):
         from dataclasses import replace as dc_replace

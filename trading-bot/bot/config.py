@@ -41,6 +41,9 @@ class CostConfig:
     commission_pct: float = 0.0005  # 0.05%
     # Slippage estimado por lado (execucao pior que o preco visto).
     slippage_pct: float = 0.0003  # 0.03%
+    # Custo de ALUGUEL para vender (short), ao ano. So incide em posicoes short,
+    # proporcional aos dias segurados. 0 = desliga. Realista para B3: 0.02-0.10.
+    short_borrow_annual_pct: float = 0.0
 
 
 @dataclass

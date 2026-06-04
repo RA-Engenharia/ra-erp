@@ -77,7 +77,7 @@ def run_backtest(
                 if sig.action in ("long", "short"):
                     qty = risk.position_size(c.close, sig.stop)
                     if qty > 0:
-                        broker.open(sig.action, qty, c.close, sig.stop, sig.take)
+                        broker.open(sig.action, qty, c.close, sig.stop, sig.take, c.ts)
 
         # 4) marca a curva de capital
         equity_curve.append((c.ts, risk.equity + broker.unrealized(c.close)))
