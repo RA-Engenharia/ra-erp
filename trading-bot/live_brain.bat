@@ -1,8 +1,9 @@
 @echo off
 REM Paper trading AO VIVO do cerebro (Windows). Ordens SIMULADAS.
-REM   live_brain.bat                 (PETR4.SA 1h, continuo -- Ctrl+C para parar)
-REM   live_brain.bat VALE3.SA 1h
-REM   live_brain.bat PETR4.SA 1h 50  (teste rapido: para apos 50 candles)
+REM   live_brain.bat                       (WEGE3.SA, swing diario -- nosso campeao)
+REM   live_brain.bat ITUB4.SA 1d swing
+REM   live_brain.bat PETR4.SA 1h day       (intraday/day trade)
+REM   live_brain.bat WEGE3.SA 1d swing 400 (teste rapido: para apos 400 candles)
 setlocal
 cd /d "%~dp0"
 

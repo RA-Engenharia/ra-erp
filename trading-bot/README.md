@@ -50,6 +50,11 @@ preços reais) — a etapa de ensaio antes de qualquer dinheiro real.
 `monitor.bat` mostra o **painel** do ensaio (acertos, fator de lucro, drawdown,
 curva de capital) lendo o log de operações simuladas.
 
+**Day trade vs swing:** `Settings.day_trade` (True = zera no fim do dia;
+False = swing, segura por dias). A análise em dados reais mostrou que o **swing
+diário** é onde as estratégias clássicas têm vantagem mais robusta — veja
+`examples/analyze_full.py` e `examples/stress_swing.py`.
+
 Guia completo passo a passo: [`PRIMEIROS_PASSOS.md`](PRIMEIROS_PASSOS.md).
 
 ### O "cérebro central" (ensemble)
@@ -83,7 +88,7 @@ python3 examples/fetch_yfinance.py AAPL 60d 5m   # baixa, testa e valida
 | `bot/config.py` | **Parâmetros de risco** (o arquivo mais importante) |
 | `bot/risk.py` | **O coração:** tamanho de posição + travas de risco |
 | `bot/strategy.py` | Estratégia base + EMA+RSI (padrão) — trocável |
-| `bot/strategies.py` | Candidatas + `RegimeFilteredStrategy` (opera só no regime certo) |
+| `bot/strategies.py` | 9 estratégias + `RegimeFilteredStrategy` (opera só no regime certo) |
 | `bot/scanner.py` | Varre ativos/timeframes procurando vantagem real (com bar honesto) |
 | `bot/broker.py` | Corretora simulada com **custos e slippage reais** |
 | `bot/backtest.py` | Motor de backtest + métricas ajustadas ao risco |
