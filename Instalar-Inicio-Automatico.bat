@@ -1,5 +1,6 @@
 @echo off
 chcp 65001 >nul
+setlocal enabledelayedexpansion
 title RA ERP - Instalar Inicio Automatico
 cd /d "%~dp0"
 
@@ -13,32 +14,58 @@ echo  mais abrir o CMD nem rodar nada manualmente.
 echo.
 echo  Pasta atual: %~dp0
 echo.
-set /p CONFIRM="Deseja ativar o inicio automatico? (S/N): "
-if /i not "%CONFIRM%"=="S" (
-    echo Cancelado.
-    pause
-    exit /b 0
+
+REM Lista todos os .bat da pasta (menos este e o desinstalador) e
+REM permite escolher qual e o iniciador. Tolerante a qualquer renomeacao.
+set "MEU_NOME=%~nx0"
+set "CONTADOR=0"
+echo  Arquivos .bat encontrados nesta pasta:
+echo  -------------------------------------------------
+for %%F in ("%~dp0*.bat") do (
+    set "NOMEARQ=%%~nxF"
+    if /i not "!NOMEARQ!"=="!MEU_NOME!" if /i not "!NOMEARQ!"=="Remover-Inicio-Automatico.bat" if /i not "!NOMEARQ!"=="RemoverInicioAutomatico.bat" if /i not "!NOMEARQ!"=="Criar-Atalho-Desktop.bat" if /i not "!NOMEARQ!"=="CriarAtalhoDesktop.bat" (
+        set /a CONTADOR+=1
+        set "OPT_!CONTADOR!=%%~fF"
+        echo   [!CONTADOR!] %%~nxF
+    )
 )
+echo  -------------------------------------------------
+echo.
+
+if "%CONTADOR%"=="0" (
+    echo [ERRO] Nenhum arquivo .bat de iniciador encontrado nesta pasta.
+    echo  Salve o "Iniciar-RA-ERP.bat" nesta pasta e rode de novo.
+    pause
+    exit /b 1
+)
+
+if "%CONTADOR%"=="1" (
+    set "ALVO=!OPT_1!"
+    echo  Achei 1 candidato. Usar este?
+    set /p CONFIRM="(S/N): "
+    if /i not "!CONFIRM!"=="S" (
+        echo Cancelado.
+        pause
+        exit /b 0
+    )
+) else (
+    set /p ESCOLHA="Digite o numero do arquivo iniciador (1-%CONTADOR%): "
+    set "ALVO=!OPT_%ESCOLHA%!"
+    if not defined ALVO (
+        echo Opcao invalida.
+        pause
+        exit /b 1
+    )
+)
+
+echo.
+echo  Iniciador escolhido: !ALVO!
+echo.
 
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
 set "ATALHO=%STARTUP%\RA-ERP.lnk"
 
-REM Descobre o nome real do iniciador (navegador as vezes tira hifens)
-set "ALVO="
-if exist "%~dp0Iniciar-RA-ERP.bat" set "ALVO=%~dp0Iniciar-RA-ERP.bat"
-if not defined ALVO if exist "%~dp0IniciarRAERP.bat" set "ALVO=%~dp0IniciarRAERP.bat"
-if not defined ALVO for %%F in ("%~dp0Iniciar*.bat") do set "ALVO=%%F"
-if not defined ALVO (
-    echo [ERRO] Nao encontrei o arquivo "Iniciar-RA-ERP.bat" nesta pasta.
-    echo  Confira se ele esta em: %~dp0
-    pause
-    exit /b 1
-)
-echo  Iniciador encontrado: %ALVO%
-echo.
-
-REM Comando PowerShell em UMA linha (sem caret de continuacao)
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%ATALHO%'); $s.TargetPath = '%ALVO%'; $s.WorkingDirectory = '%~dp0'; $s.WindowStyle = 7; $s.Description = 'RA Engenharia ERP'; $s.Save()"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%ATALHO%'); $s.TargetPath = '!ALVO!'; $s.WorkingDirectory = '%~dp0'; $s.WindowStyle = 7; $s.Description = 'RA Engenharia ERP'; $s.Save()"
 
 if exist "%ATALHO%" (
     echo.
@@ -46,15 +73,14 @@ if exist "%ATALHO%" (
     echo      Atalho criado em: %STARTUP%
     echo.
     echo  A partir do proximo boot, o sistema sobe sozinho.
-    echo  Para acessar agora, rode Iniciar-RA-ERP.bat ou abra
+    echo  Para acessar agora, rode o iniciador ou abra
     echo  http://localhost:3040 no navegador.
 ) else (
     echo.
     echo [ERRO] Nao foi possivel criar o atalho automaticamente.
-    echo  Alternativa manual ^(funciona 100%%^):
+    echo  Alternativa manual ^(100%% confiavel^):
     echo  1. Aperte Win+R, digite: shell:startup  e de Enter
-    echo  2. Copie o arquivo "Iniciar-RA-ERP.bat" pra pasta que abriu
-    echo     ^(pode ser copiar e colar normal mesmo^)
+    echo  2. Copie o arquivo iniciador pra pasta que abriu
 )
 echo.
 pause
