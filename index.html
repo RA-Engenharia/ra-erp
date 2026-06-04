@@ -130067,6 +130067,487 @@ node sinapi-fetcher.js</pre>
                 if (typeof toast === 'function') toast('Datasets recarregados — ' + linhas, 'success');
             });
         };
+
+        // ════════════════════════════════════════════════════════════════════════
+        // V72.58 — ORÇAMENTO: reajuste em massa, vencimento, conversão p/ obra
+        //
+        // Três features que faltavam no fluxo do orçamentista:
+        //   1) aplicarReajusteOrcamento(orcId)   — modal INCC/IPCA/custom % com
+        //      preview do antes/depois antes de confirmar e snapshot do reajuste
+        //      no histórico do orçamento (rastreabilidade).
+        //   2) renderKPIsVencimento()            — adiciona linha de KPIs no topo
+        //      da tela de orçamentos: vencendo em 7d, vencidos, aprovados não
+        //      convertidos em obra. Cada KPI é filtro clicável.
+        //   3) abrirMenuConverterObra()         — botão "Converter em obra"
+        //      acionado pela tabela; chama o converterOrcamentoEmObra (V72.53)
+        //      com confirmação visual e atalho pra abrir a obra criada.
+        //
+        // Tudo idempotente — se o handler já existir (ex: futuro patch nativo)
+        // mantém o original.
+        // ════════════════════════════════════════════════════════════════════════
+        const _findOrc58 = (id) => {
+            const lista = [...(db.orcamentos || []), ...(db.orcamentosDetalhados || [])];
+            return lista.find(o => String(o.id) === String(id));
+        };
+
+        const _fmtBR58 = (v) => 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        const _diasAteVencimento = (orc) => {
+            const cfg = (db.config && db.config) || {};
+            const validade = parseInt(orc.validade || orc.validadeDias || cfg.orcamentoValidade || 30);
+            const baseStr = orc.dataEnvio || orc.createdAt || orc.data;
+            if (!baseStr) return null;
+            const base = new Date(baseStr);
+            if (isNaN(base.getTime())) return null;
+            const venc = new Date(base);
+            venc.setDate(venc.getDate() + validade);
+            const hoje = new Date();
+            hoje.setHours(0, 0, 0, 0);
+            venc.setHours(0, 0, 0, 0);
+            return Math.round((venc - hoje) / 86400000);
+        };
+
+        // ── 1. REAJUSTE EM MASSA ────────────────────────────────────────────────
+        if (typeof window.aplicarReajusteOrcamento !== 'function') {
+            window.aplicarReajusteOrcamento = function(id) {
+                const orc = _findOrc58(id);
+                if (!orc) { if (typeof toast === 'function') toast('Orçamento não encontrado', 'error'); return; }
+                const itens = Array.isArray(orc.itens) ? orc.itens : [];
+                if (!itens.length) { if (typeof toast === 'function') toast('Orçamento sem itens', 'warning'); return; }
+
+                document.getElementById('reajusteOrcModal')?.remove();
+                const modal = document.createElement('div');
+                modal.id = 'reajusteOrcModal';
+                modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4';
+                modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+                modal.innerHTML = `
+                    <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-xl shadow-2xl">
+                        <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                            <div>
+                                <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-percentage text-amber-600 mr-2"></i>Aplicar reajuste de preços</h3>
+                                <p class="text-xs text-slate-500 mt-0.5">Orçamento ${orc.codigo || orc.numero || orc.id} — ${itens.length} itens</p>
+                            </div>
+                            <button onclick="document.getElementById('reajusteOrcModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="p-5 space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Índice</label>
+                                <div class="grid grid-cols-4 gap-2">
+                                    <button type="button" data-idx="INCC" data-pct="0.42" class="reaj-preset px-3 py-2 text-sm rounded-lg border-2 border-slate-200 dark:border-slate-600 hover:border-amber-500 dark:text-white">INCC<br><span class="text-xs text-slate-400">+0,42% mês</span></button>
+                                    <button type="button" data-idx="IPCA" data-pct="0.38" class="reaj-preset px-3 py-2 text-sm rounded-lg border-2 border-slate-200 dark:border-slate-600 hover:border-amber-500 dark:text-white">IPCA<br><span class="text-xs text-slate-400">+0,38% mês</span></button>
+                                    <button type="button" data-idx="IGP-M" data-pct="0.50" class="reaj-preset px-3 py-2 text-sm rounded-lg border-2 border-slate-200 dark:border-slate-600 hover:border-amber-500 dark:text-white">IGP-M<br><span class="text-xs text-slate-400">+0,50% mês</span></button>
+                                    <button type="button" data-idx="CUSTOM" data-pct="0" class="reaj-preset px-3 py-2 text-sm rounded-lg border-2 border-amber-500 dark:text-white">Custom</button>
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-1">Os percentuais sugeridos são referência. Edite o campo abaixo livremente.</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Percentual a aplicar (%)</label>
+                                <input id="reajPct" type="number" step="0.01" value="0" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg" placeholder="ex: 0.42 = +0,42% em todos os preços">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Aplicar em</label>
+                                <select id="reajAlvo" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg">
+                                    <option value="todos">Todos os itens</option>
+                                    <option value="material">Apenas Material</option>
+                                    <option value="mo">Apenas Mão de Obra</option>
+                                    <option value="equipamento">Apenas Equipamentos</option>
+                                </select>
+                            </div>
+                            <div id="reajPreview" class="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3 text-sm">
+                                <div class="flex justify-between text-slate-500"><span>Total atual</span><span id="reajTotalAtual" class="font-mono">—</span></div>
+                                <div class="flex justify-between text-amber-700 dark:text-amber-300 font-bold"><span>Total após reajuste</span><span id="reajTotalNovo" class="font-mono">—</span></div>
+                                <div class="flex justify-between text-xs text-slate-400 mt-1"><span>Diferença</span><span id="reajDif" class="font-mono">—</span></div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" id="reajSnap" checked class="rounded">
+                                <label for="reajSnap" class="text-xs text-slate-600 dark:text-slate-300">Gravar snapshot no histórico do orçamento (recomendado)</label>
+                            </div>
+                        </div>
+                        <div class="p-5 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
+                            <button onclick="document.getElementById('reajusteOrcModal').remove()" class="px-4 py-2 text-sm bg-slate-100 dark:bg-slate-700 dark:text-white rounded-lg">Cancelar</button>
+                            <button id="reajConfirmar" class="px-4 py-2 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold">
+                                <i class="fas fa-check mr-1"></i>Aplicar reajuste
+                            </button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+
+                const inputPct = modal.querySelector('#reajPct');
+                const sel = modal.querySelector('#reajAlvo');
+                const totalAtualEl = modal.querySelector('#reajTotalAtual');
+                const totalNovoEl = modal.querySelector('#reajTotalNovo');
+                const difEl = modal.querySelector('#reajDif');
+
+                const _custoItem = (it, campo) => {
+                    const q = parseFloat(it.quantidade || it.qtd || 0);
+                    if (campo === 'material') return q * parseFloat(it.precoMaterial || it.matUnit || it.precoMat || 0);
+                    if (campo === 'mo')       return q * parseFloat(it.precoMO || it.moUnit || it.precoMaoObra || 0);
+                    if (campo === 'equipamento') return q * parseFloat(it.precoEquipamento || it.eqUnit || it.precoEq || 0);
+                    // total
+                    return parseFloat(it.valorTotal || it.total || it.subtotal || (q * parseFloat(it.precoUnitario || it.unit || 0))) || 0;
+                };
+
+                const recalcPreview = () => {
+                    const pct = parseFloat(inputPct.value) || 0;
+                    const alvo = sel.value;
+                    let totAtual = 0, totNovo = 0;
+                    itens.forEach(it => {
+                        const totalIt = _custoItem(it, 'todos');
+                        totAtual += totalIt;
+                        if (alvo === 'todos') {
+                            totNovo += totalIt * (1 + pct / 100);
+                        } else {
+                            const parte = _custoItem(it, alvo);
+                            const resto = totalIt - parte;
+                            totNovo += resto + (parte * (1 + pct / 100));
+                        }
+                    });
+                    totalAtualEl.textContent = _fmtBR58(totAtual);
+                    totalNovoEl.textContent = _fmtBR58(totNovo);
+                    const dif = totNovo - totAtual;
+                    difEl.textContent = (dif >= 0 ? '+' : '') + _fmtBR58(dif) + (totAtual ? ' (' + ((dif / totAtual) * 100).toFixed(2) + '%)' : '');
+                    difEl.className = 'font-mono ' + (dif >= 0 ? 'text-amber-600' : 'text-emerald-600');
+                };
+                inputPct.addEventListener('input', recalcPreview);
+                sel.addEventListener('change', recalcPreview);
+                modal.querySelectorAll('.reaj-preset').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        modal.querySelectorAll('.reaj-preset').forEach(b => b.classList.remove('border-amber-500'));
+                        modal.querySelectorAll('.reaj-preset').forEach(b => b.classList.add('border-slate-200', 'dark:border-slate-600'));
+                        btn.classList.remove('border-slate-200', 'dark:border-slate-600');
+                        btn.classList.add('border-amber-500');
+                        const pct = parseFloat(btn.getAttribute('data-pct')) || 0;
+                        if (btn.getAttribute('data-idx') !== 'CUSTOM') inputPct.value = pct;
+                        recalcPreview();
+                    });
+                });
+                recalcPreview();
+
+                modal.querySelector('#reajConfirmar').addEventListener('click', () => {
+                    const pct = parseFloat(inputPct.value) || 0;
+                    if (Math.abs(pct) < 0.001) {
+                        if (typeof toast === 'function') toast('Informe um percentual diferente de zero', 'warning');
+                        return;
+                    }
+                    const alvo = sel.value;
+                    const idxSel = (modal.querySelector('.reaj-preset.border-amber-500')?.getAttribute('data-idx')) || 'CUSTOM';
+                    const snapshot = modal.querySelector('#reajSnap').checked;
+
+                    if (snapshot) {
+                        orc.reajustesHistorico = orc.reajustesHistorico || [];
+                        orc.reajustesHistorico.push({
+                            data: new Date().toISOString(),
+                            indice: idxSel, percentual: pct, alvo,
+                            totalAntes: parseFloat(totalAtualEl.textContent.replace(/[^\d,-]/g, '').replace(',', '.')) || 0,
+                            totalDepois: parseFloat(totalNovoEl.textContent.replace(/[^\d,-]/g, '').replace(',', '.')) || 0
+                        });
+                    }
+
+                    const fator = 1 + pct / 100;
+                    itens.forEach(it => {
+                        const q = parseFloat(it.quantidade || it.qtd || 0) || 0;
+                        const aplica = (campos) => {
+                            campos.forEach(c => {
+                                if (it[c] !== undefined && it[c] !== null && it[c] !== '') {
+                                    const v = parseFloat(it[c]);
+                                    if (!isNaN(v)) it[c] = +(v * fator).toFixed(4);
+                                }
+                            });
+                        };
+                        if (alvo === 'todos' || alvo === 'material') aplica(['precoMaterial', 'matUnit', 'precoMat']);
+                        if (alvo === 'todos' || alvo === 'mo')       aplica(['precoMO', 'moUnit', 'precoMaoObra']);
+                        if (alvo === 'todos' || alvo === 'equipamento') aplica(['precoEquipamento', 'eqUnit', 'precoEq']);
+                        if (alvo === 'todos') aplica(['precoUnitario', 'unit', 'unitario']);
+                        // recalcula totais do item conforme o que existir
+                        const pm = parseFloat(it.precoMaterial || it.matUnit || it.precoMat || 0);
+                        const pmo = parseFloat(it.precoMO || it.moUnit || it.precoMaoObra || 0);
+                        const peq = parseFloat(it.precoEquipamento || it.eqUnit || it.precoEq || 0);
+                        const pu = parseFloat(it.precoUnitario || it.unit || it.unitario || 0);
+                        const unit = pu || (pm + pmo + peq);
+                        if ('precoUnitario' in it) it.precoUnitario = +unit.toFixed(4);
+                        if ('unit' in it) it.unit = +unit.toFixed(4);
+                        const tot = q * unit;
+                        if ('valorTotal' in it) it.valorTotal = +tot.toFixed(2);
+                        if ('total' in it) it.total = +tot.toFixed(2);
+                        if ('subtotal' in it) it.subtotal = +tot.toFixed(2);
+                    });
+
+                    // recalcula total do orçamento
+                    const novoTotal = itens.reduce((s, it) => s + (parseFloat(it.valorTotal || it.total || it.subtotal || 0) || 0), 0);
+                    if ('totalSemBDI' in orc) orc.totalSemBDI = +novoTotal.toFixed(2);
+                    if ('total' in orc) orc.total = +novoTotal.toFixed(2);
+                    if ('valor' in orc) {
+                        const bdi = parseFloat(orc.bdi || 0);
+                        orc.valor = +(novoTotal * (1 + bdi / 100)).toFixed(2);
+                    }
+                    if ('totalComBDI' in orc) {
+                        const bdi = parseFloat(orc.bdi || 0);
+                        orc.totalComBDI = +(novoTotal * (1 + bdi / 100)).toFixed(2);
+                    }
+                    orc.updatedAt = new Date().toISOString();
+
+                    if (typeof saveData === 'function') saveData();
+                    if (typeof logAudit === 'function') logAudit('ORCAMENTO_REAJUSTADO', { id: orc.id, indice: idxSel, percentual: pct, alvo });
+                    modal.remove();
+                    if (typeof toast === 'function') toast('Reajuste de ' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '% aplicado (' + idxSel + ')', 'success');
+                    if (typeof renderOrcamentos === 'function') { try { renderOrcamentos(); } catch (e) {} }
+                    if (typeof renderOrcamentosUnificado === 'function') { try { renderOrcamentosUnificado(); } catch (e) {} }
+                    if (typeof renderItensOrcamento === 'function' && document.getElementById('itensOrcamentoLista')) { try { renderItensOrcamento(); } catch (e) {} }
+                });
+            };
+        }
+
+        // ── 2. KPIs DE VENCIMENTO ───────────────────────────────────────────────
+        if (typeof window.renderKPIsVencimentoOrcamento !== 'function') {
+            window.renderKPIsVencimentoOrcamento = function(containerId) {
+                const cont = containerId ? document.getElementById(containerId) : null;
+                const orcamentos = db.orcamentos || [];
+                let vencendo7d = 0, vencidos = 0, aprovadosSemObra = 0, vencidosValor = 0;
+                orcamentos.forEach(o => {
+                    const status = (o.status || '').toLowerCase();
+                    const dias = _diasAteVencimento(o);
+                    if (status !== 'aprovado' && status !== 'recusado' && dias !== null) {
+                        if (dias < 0) { vencidos++; vencidosValor += parseFloat(o.valor || 0); }
+                        else if (dias <= 7) vencendo7d++;
+                    }
+                    if (status === 'aprovado' && !o.obraIdGerada) aprovadosSemObra++;
+                });
+
+                const html = `
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                        <button onclick="filtrarOrcamentosPorVencimento('vencendo')" class="text-left p-4 rounded-xl bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/30 dark:to-amber-800/20 border border-amber-200 dark:border-amber-800 hover:shadow-md transition-all">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg bg-amber-500 text-white flex items-center justify-center"><i class="fas fa-hourglass-half"></i></div>
+                                <div class="flex-1">
+                                    <div class="text-xs text-amber-700 dark:text-amber-300 font-semibold uppercase">Vencendo em 7 dias</div>
+                                    <div class="text-2xl font-bold text-amber-900 dark:text-amber-100">${vencendo7d}</div>
+                                </div>
+                            </div>
+                        </button>
+                        <button onclick="filtrarOrcamentosPorVencimento('vencidos')" class="text-left p-4 rounded-xl bg-gradient-to-br from-red-50 to-red-100 dark:from-red-900/30 dark:to-red-800/20 border border-red-200 dark:border-red-800 hover:shadow-md transition-all">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg bg-red-500 text-white flex items-center justify-center"><i class="fas fa-calendar-times"></i></div>
+                                <div class="flex-1">
+                                    <div class="text-xs text-red-700 dark:text-red-300 font-semibold uppercase">Vencidos (pendentes)</div>
+                                    <div class="text-2xl font-bold text-red-900 dark:text-red-100">${vencidos}</div>
+                                    <div class="text-[11px] text-red-700 dark:text-red-300">${_fmtBR58(vencidosValor)} em aberto</div>
+                                </div>
+                            </div>
+                        </button>
+                        <button onclick="filtrarOrcamentosPorVencimento('aprovados-sem-obra')" class="text-left p-4 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/30 dark:to-emerald-800/20 border border-emerald-200 dark:border-emerald-800 hover:shadow-md transition-all">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg bg-emerald-500 text-white flex items-center justify-center"><i class="fas fa-hard-hat"></i></div>
+                                <div class="flex-1">
+                                    <div class="text-xs text-emerald-700 dark:text-emerald-300 font-semibold uppercase">Aprovados sem obra</div>
+                                    <div class="text-2xl font-bold text-emerald-900 dark:text-emerald-100">${aprovadosSemObra}</div>
+                                    <div class="text-[11px] text-emerald-700 dark:text-emerald-300">prontos pra converter</div>
+                                </div>
+                            </div>
+                        </button>
+                    </div>`;
+
+                if (cont) cont.innerHTML = html;
+                return { vencendo7d, vencidos, aprovadosSemObra, vencidosValor, html };
+            };
+        }
+
+        // Filtro acionado pelos KPIs — sem reescrever renderOrcamentos, só
+        // setamos um filtro global e re-renderizamos com filtro adicional.
+        if (typeof window.filtrarOrcamentosPorVencimento !== 'function') {
+            window.filtrarOrcamentosPorVencimento = function(modo) {
+                const tipos = { 'vencendo': 'vencendo em 7 dias', 'vencidos': 'vencidos', 'aprovados-sem-obra': 'aprovados sem obra' };
+                const lista = (db.orcamentos || []).filter(o => {
+                    const status = (o.status || '').toLowerCase();
+                    const dias = _diasAteVencimento(o);
+                    if (modo === 'vencendo') return status !== 'aprovado' && status !== 'recusado' && dias !== null && dias >= 0 && dias <= 7;
+                    if (modo === 'vencidos') return status !== 'aprovado' && status !== 'recusado' && dias !== null && dias < 0;
+                    if (modo === 'aprovados-sem-obra') return status === 'aprovado' && !o.obraIdGerada;
+                    return true;
+                });
+                // Mostra resultado em modal flutuante (não interfere na tela ativa)
+                document.getElementById('vencOrcModal')?.remove();
+                const m = document.createElement('div');
+                m.id = 'vencOrcModal';
+                m.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4';
+                m.onclick = (e) => { if (e.target === m) m.remove(); };
+                const linhas = lista.map(o => {
+                    const dias = _diasAteVencimento(o);
+                    const diasTxt = dias === null ? '-' : (dias < 0 ? Math.abs(dias) + ' dias atrás' : 'em ' + dias + ' dias');
+                    return `<tr class="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                        <td class="p-2 font-mono text-xs">${o.codigo || o.numero || o.id.slice(-6)}</td>
+                        <td class="p-2 text-sm">${o.cliente || '-'}</td>
+                        <td class="p-2 text-sm">${(o.objetivo || o.descricao || '').substring(0, 40)}</td>
+                        <td class="p-2 text-sm">${o.status || '-'}</td>
+                        <td class="p-2 text-right font-mono text-sm">${_fmtBR58(o.valor)}</td>
+                        <td class="p-2 text-xs text-slate-500">${diasTxt}</td>
+                        <td class="p-2 text-right">
+                            <button onclick="document.getElementById('vencOrcModal').remove(); if(typeof editOrcamento==='function') editOrcamento('${o.id}');" class="px-2 py-1 text-xs bg-blue-600 text-white rounded">Abrir</button>
+                            ${modo === 'aprovados-sem-obra' ? `<button onclick="document.getElementById('vencOrcModal').remove(); window.converterOrcamentoEmObra('${o.id}');" class="px-2 py-1 text-xs bg-emerald-600 text-white rounded ml-1">→ Obra</button>` : ''}
+                        </td>
+                    </tr>`;
+                }).join('');
+                m.innerHTML = `
+                    <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-4xl max-h-[80vh] flex flex-col shadow-2xl">
+                        <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                            <div>
+                                <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-filter text-blue-600 mr-2"></i>Orçamentos ${tipos[modo] || ''}</h3>
+                                <p class="text-xs text-slate-500 mt-0.5">${lista.length} encontrados</p>
+                            </div>
+                            <button onclick="document.getElementById('vencOrcModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="p-3 overflow-auto flex-1">
+                            ${lista.length ? `
+                                <table class="w-full">
+                                    <thead class="bg-slate-50 dark:bg-slate-900/40 text-xs uppercase text-slate-500">
+                                        <tr><th class="p-2 text-left">Nº</th><th class="p-2 text-left">Cliente</th><th class="p-2 text-left">Objeto</th><th class="p-2 text-left">Status</th><th class="p-2 text-right">Valor</th><th class="p-2 text-left">Vencimento</th><th></th></tr>
+                                    </thead>
+                                    <tbody>${linhas}</tbody>
+                                </table>
+                            ` : '<div class="p-8 text-center text-slate-400">Nenhum orçamento neste filtro.</div>'}
+                        </div>
+                    </div>`;
+                document.body.appendChild(m);
+            };
+        }
+
+        // ── 3. WIRE-UP do menu "ações" do orçamento ────────────────────────────
+        // Adiciona dois itens de menu: "Aplicar reajuste" e "Converter em obra".
+        // Como a tabela é re-renderizada por renderOrcamentos(), injetamos via
+        // delegação: ao clicar na célula de ações, abrimos um menu flutuante.
+        if (typeof window.abrirMenuAcoesExtraOrcamento !== 'function') {
+            window.abrirMenuAcoesExtraOrcamento = function(orcId, anchorEl) {
+                document.getElementById('orcAcoesMenu')?.remove();
+                const orc = _findOrc58(orcId);
+                if (!orc) return;
+                const menu = document.createElement('div');
+                menu.id = 'orcAcoesMenu';
+                menu.className = 'fixed bg-white dark:bg-slate-700 shadow-xl rounded-lg z-[9999] min-w-56 py-1 border border-slate-200 dark:border-slate-600';
+                const rect = anchorEl.getBoundingClientRect();
+                menu.style.top = (rect.bottom + 4) + 'px';
+                menu.style.left = Math.max(8, rect.right - 224) + 'px';
+                const podeConverter = !orc.obraIdGerada;
+                menu.innerHTML = `
+                    <button onclick="document.getElementById('orcAcoesMenu').remove(); window.aplicarReajusteOrcamento('${orcId}');" class="w-full text-left px-3 py-2 hover:bg-amber-50 dark:hover:bg-amber-900/30 text-sm dark:text-white flex items-center gap-2">
+                        <i class="fas fa-percentage text-amber-600 w-4"></i> Aplicar reajuste (INCC/IPCA)
+                    </button>
+                    ${podeConverter ? `<button onclick="document.getElementById('orcAcoesMenu').remove(); window.converterOrcamentoEmObra('${orcId}');" class="w-full text-left px-3 py-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-sm dark:text-white flex items-center gap-2">
+                        <i class="fas fa-hard-hat text-emerald-600 w-4"></i> Converter em obra
+                    </button>` : `<div class="px-3 py-2 text-xs text-slate-400"><i class="fas fa-check-circle text-emerald-600 mr-1"></i>Já gerou obra</div>`}
+                    <div class="border-t border-slate-200 dark:border-slate-600 my-1"></div>
+                    <button onclick="document.getElementById('orcAcoesMenu').remove(); window.verHistoricoReajustes('${orcId}');" class="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-600 text-sm dark:text-white flex items-center gap-2">
+                        <i class="fas fa-history text-slate-500 w-4"></i> Histórico de reajustes
+                    </button>`;
+                document.body.appendChild(menu);
+                setTimeout(() => {
+                    const close = (e) => { if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', close); } };
+                    document.addEventListener('click', close);
+                }, 50);
+            };
+        }
+
+        if (typeof window.verHistoricoReajustes !== 'function') {
+            window.verHistoricoReajustes = function(orcId) {
+                const orc = _findOrc58(orcId);
+                if (!orc) return;
+                const hist = orc.reajustesHistorico || [];
+                document.getElementById('histReajModal')?.remove();
+                const m = document.createElement('div');
+                m.id = 'histReajModal';
+                m.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4';
+                m.onclick = (e) => { if (e.target === m) m.remove(); };
+                const linhas = hist.map(h => `
+                    <tr class="border-b border-slate-100 dark:border-slate-700">
+                        <td class="p-2 text-xs">${new Date(h.data).toLocaleString('pt-BR')}</td>
+                        <td class="p-2 text-sm font-bold">${h.indice}</td>
+                        <td class="p-2 text-sm">${h.percentual >= 0 ? '+' : ''}${h.percentual.toFixed(2)}%</td>
+                        <td class="p-2 text-sm">${h.alvo}</td>
+                        <td class="p-2 text-right text-xs text-slate-500">${_fmtBR58(h.totalAntes)}</td>
+                        <td class="p-2 text-right text-sm font-mono">${_fmtBR58(h.totalDepois)}</td>
+                    </tr>`).join('');
+                m.innerHTML = `
+                    <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-3xl shadow-2xl">
+                        <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                            <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-history text-blue-600 mr-2"></i>Histórico de reajustes — ${orc.codigo || orc.id}</h3>
+                            <button onclick="document.getElementById('histReajModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="p-3 overflow-auto max-h-[60vh]">
+                            ${hist.length ? `<table class="w-full">
+                                <thead class="bg-slate-50 dark:bg-slate-900/40 text-xs uppercase text-slate-500">
+                                    <tr><th class="p-2 text-left">Data</th><th class="p-2 text-left">Índice</th><th class="p-2 text-left">%</th><th class="p-2 text-left">Alvo</th><th class="p-2 text-right">Antes</th><th class="p-2 text-right">Depois</th></tr>
+                                </thead>
+                                <tbody>${linhas}</tbody>
+                            </table>` : '<div class="p-6 text-center text-slate-400">Nenhum reajuste aplicado neste orçamento ainda.</div>'}
+                        </div>
+                    </div>`;
+                document.body.appendChild(m);
+            };
+        }
+
+        // ── Injeção automática do botão "mais ações" + KPIs de vencimento ───
+        // Estratégia robusta: MutationObserver no #orcamentosTable. Sempre que
+        // a tabela é re-renderizada (por qualquer caminho), injetamos os botões
+        // extras e atualizamos os KPIs. Imune a quem hookou renderOrcamentos.
+        const _v72_58_enriquecer = () => {
+            try {
+                // KPIs de vencimento — injeta uma vez logo abaixo dos cards padrão
+                if (!document.getElementById('orcKpisVenc')) {
+                    const cardsRow = document.getElementById('orcPendentes')?.closest('.grid');
+                    if (cardsRow) {
+                        const div = document.createElement('div');
+                        div.id = 'orcKpisVenc';
+                        cardsRow.parentNode.insertBefore(div, cardsRow.nextSibling);
+                    }
+                }
+                if (document.getElementById('orcKpisVenc')) {
+                    window.renderKPIsVencimentoOrcamento('orcKpisVenc');
+                }
+                // Botão "mais ações" em cada linha — idempotente
+                document.querySelectorAll('#orcamentosTable tr').forEach(tr => {
+                    if (tr.querySelector('.btn-orc-mais')) return;
+                    const btnEditar = tr.querySelector('button[onclick^="editOrcamento"]');
+                    if (!btnEditar) return;
+                    const orcMatch = btnEditar.getAttribute('onclick').match(/editOrcamento\('([^']+)'\)/);
+                    if (!orcMatch) return;
+                    const orcId = orcMatch[1];
+                    const cellAcoes = btnEditar.closest('td');
+                    if (!cellAcoes) return;
+                    const flexWrap = cellAcoes.querySelector('.flex');
+                    if (!flexWrap) return;
+                    const novo = document.createElement('button');
+                    novo.className = 'btn-orc-mais p-2 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-all';
+                    novo.title = 'Mais ações (reajuste, converter em obra)';
+                    novo.innerHTML = '<i class="fas fa-ellipsis-v"></i>';
+                    novo.setAttribute('onclick', "window.abrirMenuAcoesExtraOrcamento('" + orcId + "', this)");
+                    flexWrap.appendChild(novo);
+                });
+            } catch (e) {
+                console.warn('[V72.58] enriquecer:', e.message);
+            }
+        };
+
+        const _v72_58_observarTabela = () => {
+            const tabela = document.getElementById('orcamentosTable');
+            if (!tabela || tabela._v72_58_observed) return false;
+            tabela._v72_58_observed = true;
+            const obs = new MutationObserver(() => {
+                // debounce simples: reagenda
+                clearTimeout(tabela._v72_58_tmr);
+                tabela._v72_58_tmr = setTimeout(_v72_58_enriquecer, 80);
+            });
+            obs.observe(tabela, { childList: true, subtree: false });
+            _v72_58_enriquecer(); // primeira passada
+            return true;
+        };
+
+        if (!_v72_58_observarTabela()) {
+            let tentativas = 0;
+            const itv = setInterval(() => {
+                tentativas++;
+                if (_v72_58_observarTabela() || tentativas > 60) clearInterval(itv);
+            }, 500);
+        }
+
+        console.log('[V72.58] orçamento: reajuste em massa, KPIs vencimento, converter em obra wired up');
     })();
 
 </script>
