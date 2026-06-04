@@ -27,7 +27,9 @@ from .risk import RiskManager
 from .scanner import ScanResult, format_scan, scan_candles
 from .strategies import (
     BollingerStrategy,
+    BreakdownStrategy,
     BreakoutStrategy,
+    DowntrendStrategy,
     MacdStrategy,
     MeanReversionStrategy,
     RegimeFilteredStrategy,
@@ -75,6 +77,8 @@ __all__ = [
     "SuperTrendStrategy",
     "RocStrategy",
     "Rsi2Strategy",
+    "DowntrendStrategy",
+    "BreakdownStrategy",
     "StrategySpec",
     "compare_strategies",
     "grid_search",

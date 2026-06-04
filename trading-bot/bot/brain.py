@@ -71,14 +71,19 @@ class EnsembleStrategy(Strategy):
                 short_takes.append(s.take)
                 voters.append(m.name)
 
-        # consenso = fracao do peso total que concorda com a direcao vencedora
-        if long_w > short_w and long_w / total >= self.min_consensus:
-            self.last_confidence = long_w / total
+        # consenso = fracao do peso QUE VOTOU hoje que concorda com a direcao
+        # vencedora. (Antes usava o peso total, incluindo estrategias caladas no
+        # dia -> consenso quase impossivel, robo nunca operava no diario.)
+        voting = long_w + short_w
+        if voting <= 0:
+            return Signal(None)  # ninguem disparou sinal hoje
+        if long_w > short_w and long_w / voting >= self.min_consensus:
+            self.last_confidence = long_w / voting
             stop = sum(long_stops) / len(long_stops)
             take = sum(long_takes) / len(long_takes)
             return Signal("long", stop, take, f"consenso {self.last_confidence:.0%}: {'+'.join(voters)}")
-        if short_w > long_w and short_w / total >= self.min_consensus:
-            self.last_confidence = short_w / total
+        if short_w > long_w and short_w / voting >= self.min_consensus:
+            self.last_confidence = short_w / voting
             stop = sum(short_stops) / len(short_stops)
             take = sum(short_takes) / len(short_takes)
             return Signal("short", stop, take, f"consenso {self.last_confidence:.0%}: {'+'.join(voters)}")

@@ -212,6 +212,88 @@ class Rsi2Strategy(Strategy):
         return Signal(None)
 
 
+class DowntrendStrategy(Strategy):
+    """Especialista em QUEDA (short-only): vende quando a tendencia vira para
+
+    baixo (EMA rapida cruza abaixo da lenta) E o preco esta abaixo da media
+    longa (baixa confirmada). Acompanha a queda. Stop por ATR acima do preco.
+
+    ATENCAO: vender acao (short) tem custo/risco de ALUGUEL que o backtest NAO
+    modela. Trate o resultado com ceticismo extra.
+    """
+
+    def __init__(self, params: dict | None = None):
+        p = params or {}
+        self.ema_fast = int(p.get("ema_fast", 9))
+        self.ema_slow = int(p.get("ema_slow", 21))
+        self.trend_ema = int(p.get("trend_ema", 100))
+        self.atr_period = int(p.get("atr_period", 14))
+        self.stop_atr_mult = float(p.get("stop_atr_mult", 1.5))
+        self.reward_risk = float(p.get("reward_risk", 1.5))
+        self.warmup = max(self.ema_slow, self.trend_ema, self.atr_period) + 2
+
+    def prepare(self, candles: list[Candle]) -> None:
+        self._closes, highs, lows = _ohlc(candles)
+        self._ef = indicators.ema(self._closes, self.ema_fast)
+        self._es = indicators.ema(self._closes, self.ema_slow)
+        self._trend = indicators.ema(self._closes, self.trend_ema)
+        self._atr = indicators.atr(highs, lows, self._closes, self.atr_period)
+
+    def signal(self, i: int) -> Signal:
+        if i < self.warmup:
+            return Signal(None)
+        ef, es, efp, esp = self._ef[i], self._es[i], self._ef[i - 1], self._es[i - 1]
+        trend, atr_v = self._trend[i], self._atr[i]
+        if None in (ef, es, efp, esp, trend, atr_v):
+            return Signal(None)
+        price = self._closes[i]
+        dist = atr_v * self.stop_atr_mult
+        cross_dn = efp >= esp and ef < es
+        if cross_dn and price < trend:  # baixa confirmada
+            return Signal("short", price + dist, price - dist * self.reward_risk, "down_short")
+        return Signal(None)
+
+
+class BreakdownStrategy(Strategy):
+    """Especialista em QUEDA por rompimento (short-only): vende quando o preco
+
+    perde a minima dos ultimos N dias (Donchian inferior), em tendencia de
+    baixa. Captura a continuacao de quedas. Stop por ATR.
+
+    ATENCAO: short de acao tem custo/risco de aluguel nao modelado aqui.
+    """
+
+    def __init__(self, params: dict | None = None):
+        p = params or {}
+        self.channel = int(p.get("channel", 20))
+        self.trend_ema = int(p.get("trend_ema", 100))
+        self.atr_period = int(p.get("atr_period", 14))
+        self.stop_atr_mult = float(p.get("stop_atr_mult", 1.5))
+        self.reward_risk = float(p.get("reward_risk", 1.5))
+        self.warmup = max(self.channel, self.trend_ema, self.atr_period) + 2
+
+    def prepare(self, candles: list[Candle]) -> None:
+        self._closes, highs, lows = _ohlc(candles)
+        self._trend = indicators.ema(self._closes, self.trend_ema)
+        self._atr = indicators.atr(highs, lows, self._closes, self.atr_period)
+        n = len(candles)
+        self._ll: list[float | None] = [None] * n
+        for i in range(self.channel, n):
+            self._ll[i] = min(lows[i - self.channel : i])
+
+    def signal(self, i: int) -> Signal:
+        if i < self.warmup:
+            return Signal(None)
+        ll, trend, atr_v = self._ll[i], self._trend[i], self._atr[i]
+        if None in (ll, trend, atr_v):
+            return Signal(None)
+        price = self._closes[i]
+        dist = atr_v * self.stop_atr_mult
+        if price < ll and price < trend:  # rompeu o piso, em baixa
+            return Signal("short", price + dist, price - dist * self.reward_risk, "breakdown")
+        return Signal(None)
+
+
 class RegimeFilteredStrategy(Strategy):
     """Envolve outra estrategia e so a deixa operar no REGIME certo.
 

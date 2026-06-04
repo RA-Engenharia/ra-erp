@@ -173,6 +173,19 @@ class TestCompareStrategies(unittest.TestCase):
         self.assertEqual(scores, sorted(scores, reverse=True))
 
 
+class TestBearStrategies(unittest.TestCase):
+    def test_short_only_in_downtrend(self):
+        from bot.strategies import BreakdownStrategy, DowntrendStrategy
+
+        bear = generate_regime_candles("bear", n_days=120, seed=2)
+        for cls in (DowntrendStrategy, BreakdownStrategy):
+            result = run_backtest(bear, cls(), SETTINGS)
+            sides = {t.side for t in result.trades}
+            # especialistas em queda so vendem (nunca compram)
+            self.assertTrue(sides.issubset({"short"}), f"{cls.__name__}: {sides}")
+            self.assertGreater(result.metrics["n_trades"], 0, cls.__name__)
+
+
 class TestSwingMode(unittest.TestCase):
     def test_swing_has_no_eod_exits(self):
         from dataclasses import replace as dc_replace

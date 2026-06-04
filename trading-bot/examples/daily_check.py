@@ -31,7 +31,9 @@ from bot.monitor import TradeRow  # noqa: E402
 from bot.live import candle_feed  # noqa: E402
 from bot.strategies import (  # noqa: E402
     BollingerStrategy,
+    BreakdownStrategy,
     BreakoutStrategy,
+    DowntrendStrategy,
     MacdStrategy,
     MeanReversionStrategy,
     RocStrategy,
@@ -56,6 +58,9 @@ def build_specs(settings: Settings) -> list[StrategySpec]:
         StrategySpec("SuperTrend", SuperTrendStrategy, {"period": [7, 10], "mult": [2.0, 3.0]}),
         StrategySpec("ROC", RocStrategy, {"roc_period": [9, 12], "threshold": [0.0, 0.5]}),
         StrategySpec("RSI-2", Rsi2Strategy, {"oversold": [5, 10], "trend_sma": [100, 200]}),
+        # especialistas em QUEDA (short-only) -- atencao ao custo de aluguel
+        StrategySpec("Breakdown", BreakdownStrategy, {"channel": [10, 20, 40]}),
+        StrategySpec("Downtrend", DowntrendStrategy, {"ema_fast": [5, 9], "trend_ema": [100, 200]}),
     ]
 
 
