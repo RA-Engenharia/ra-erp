@@ -101,6 +101,117 @@ class MeanReversionStrategy(Strategy):
         return Signal(None)
 
 
+class SuperTrendStrategy(Strategy):
+    """SuperTrend -- segue tendencia por ATR. Otimo para SWING (segura dias).
+
+    Compra quando a tendencia vira para alta, vende quando vira para baixa. O
+    stop e a propria linha do SuperTrend (sobe junto na alta = trailing stop).
+    """
+
+    def __init__(self, params: dict | None = None):
+        p = params or {}
+        self.period = int(p.get("period", 10))
+        self.mult = float(p.get("mult", 3.0))
+        self.reward_risk = float(p.get("reward_risk", 2.0))
+        self.allow_short = bool(p.get("allow_short", True))
+        self.warmup = self.period + 2
+
+    def prepare(self, candles: list[Candle]) -> None:
+        self._closes, highs, lows = _ohlc(candles)
+        self._line, self._dir = indicators.supertrend(highs, lows, self._closes, self.period, self.mult)
+
+    def signal(self, i: int) -> Signal:
+        if i < self.warmup:
+            return Signal(None)
+        d, dp, line = self._dir[i], self._dir[i - 1], self._line[i]
+        if None in (d, dp, line):
+            return Signal(None)
+        price = self._closes[i]
+        if dp == -1 and d == 1 and line < price:  # virou para alta
+            dist = price - line
+            return Signal("long", line, price + dist * self.reward_risk, "st_up")
+        if self.allow_short and dp == 1 and d == -1 and line > price:  # virou para baixa
+            dist = line - price
+            return Signal("short", line, price - dist * self.reward_risk, "st_dn")
+        return Signal(None)
+
+
+class RocStrategy(Strategy):
+    """Momentum por Rate of Change: entra quando o ROC cruza o limiar.
+
+    Aposta na continuacao do movimento quando ele ganha forca. Stop por ATR.
+    """
+
+    def __init__(self, params: dict | None = None):
+        p = params or {}
+        self.roc_period = int(p.get("roc_period", 12))
+        self.threshold = float(p.get("threshold", 0.0))
+        self.atr_period = int(p.get("atr_period", 14))
+        self.stop_atr_mult = float(p.get("stop_atr_mult", 1.5))
+        self.reward_risk = float(p.get("reward_risk", 1.5))
+        self.allow_short = bool(p.get("allow_short", True))
+        self.warmup = max(self.roc_period, self.atr_period) + 2
+
+    def prepare(self, candles: list[Candle]) -> None:
+        self._closes, highs, lows = _ohlc(candles)
+        self._roc = indicators.roc(self._closes, self.roc_period)
+        self._atr = indicators.atr(highs, lows, self._closes, self.atr_period)
+
+    def signal(self, i: int) -> Signal:
+        if i < self.warmup:
+            return Signal(None)
+        r, rp, atr_v = self._roc[i], self._roc[i - 1], self._atr[i]
+        if None in (r, rp, atr_v):
+            return Signal(None)
+        price = self._closes[i]
+        dist = atr_v * self.stop_atr_mult
+        if rp <= self.threshold < r:  # cruzou para cima
+            return Signal("long", price - dist, price + dist * self.reward_risk, "roc_up")
+        if self.allow_short and rp >= -self.threshold > r:  # cruzou para baixo
+            return Signal("short", price + dist, price - dist * self.reward_risk, "roc_dn")
+        return Signal(None)
+
+
+class Rsi2Strategy(Strategy):
+    """RSI-2 (Connors): reversao de curto prazo A FAVOR da tendencia maior.
+
+    Classico de swing: compra quedas curtas (RSI-2 baixo) quando o ativo esta
+    ACIMA da media longa (tendencia de alta); vende repiques quando abaixo.
+    """
+
+    def __init__(self, params: dict | None = None):
+        p = params or {}
+        self.rsi_period = int(p.get("rsi_period", 2))
+        self.oversold = float(p.get("oversold", 10.0))
+        self.overbought = float(p.get("overbought", 90.0))
+        self.trend_sma = int(p.get("trend_sma", 200))
+        self.atr_period = int(p.get("atr_period", 14))
+        self.stop_atr_mult = float(p.get("stop_atr_mult", 2.0))
+        self.reward_risk = float(p.get("reward_risk", 1.5))
+        self.allow_short = bool(p.get("allow_short", True))
+        self.warmup = max(self.trend_sma, self.rsi_period, self.atr_period) + 2
+
+    def prepare(self, candles: list[Candle]) -> None:
+        self._closes, highs, lows = _ohlc(candles)
+        self._rsi = indicators.rsi(self._closes, self.rsi_period)
+        self._sma = indicators.sma(self._closes, self.trend_sma)
+        self._atr = indicators.atr(highs, lows, self._closes, self.atr_period)
+
+    def signal(self, i: int) -> Signal:
+        if i < self.warmup:
+            return Signal(None)
+        rsi_v, sma_v, atr_v = self._rsi[i], self._sma[i], self._atr[i]
+        if None in (rsi_v, sma_v, atr_v):
+            return Signal(None)
+        price = self._closes[i]
+        dist = atr_v * self.stop_atr_mult
+        if price > sma_v and rsi_v < self.oversold:  # queda curta em tendencia de alta
+            return Signal("long", price - dist, price + dist * self.reward_risk, "rsi2_long")
+        if self.allow_short and price < sma_v and rsi_v > self.overbought:
+            return Signal("short", price + dist, price - dist * self.reward_risk, "rsi2_short")
+        return Signal(None)
+
+
 class RegimeFilteredStrategy(Strategy):
     """Envolve outra estrategia e so a deixa operar no REGIME certo.
 

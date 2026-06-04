@@ -57,15 +57,20 @@ def run_backtest(
             risk.on_trade_closed(closed.pnl)
             trades.append(closed)
 
-        # 2) day trade: zera a posicao no fim de cada dia
-        is_eod = (i == n - 1) or (candles[i + 1].day_index != c.day_index)
-        if is_eod and broker.has_position():
-            closed = broker.close(c.close, c.ts, "eod")
+        # 2) day trade: zera a posicao no fim de cada dia. Em swing, segura.
+        is_day_end = (i == n - 1) or (candles[i + 1].day_index != c.day_index)
+        is_last = i == n - 1
+        force_close = is_last or (settings.day_trade and is_day_end)
+        if force_close and broker.has_position():
+            reason = "eod" if (settings.day_trade and is_day_end and not is_last) else "end"
+            closed = broker.close(c.close, c.ts, reason)
             risk.on_trade_closed(closed.pnl)
             trades.append(closed)
 
-        # 3) novas entradas (respeitando as travas de risco)
-        if not is_eod and not broker.has_position():
+        # 3) novas entradas (respeitando as travas de risco). Em day trade nao
+        #    abrimos no ultimo candle do dia (seria zerado em seguida).
+        block_entry = is_last or (settings.day_trade and is_day_end)
+        if not block_entry and not broker.has_position():
             ok, _reason = risk.can_trade()
             if ok:
                 sig = strategy.signal(i)
@@ -76,7 +81,7 @@ def run_backtest(
 
         # 4) marca a curva de capital
         equity_curve.append((c.ts, risk.equity + broker.unrealized(c.close)))
-        if is_eod:
+        if is_day_end:
             daily_equity.append(risk.equity)
 
     metrics = compute_metrics(equity_curve, daily_equity, trades, settings)

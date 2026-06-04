@@ -64,6 +64,9 @@ class Settings:
     risk: RiskConfig
     costs: CostConfig
     strategy: StrategyConfig
+    # True  = day trade (zera a posicao no fim de cada dia).
+    # False = swing  (segura a posicao por varios dias, ate stop/alvo).
+    day_trade: bool = True
 
     @staticmethod
     def default() -> "Settings":

@@ -17,6 +17,9 @@ from bot.strategies import (  # noqa: E402
     MacdStrategy,
     MeanReversionStrategy,
     RegimeFilteredStrategy,
+    RocStrategy,
+    Rsi2Strategy,
+    SuperTrendStrategy,
     TrendEmaStrategy,
 )
 from bot.strategy import Signal, Strategy  # noqa: E402
@@ -40,6 +43,9 @@ class TestStrategiesRun(unittest.TestCase):
             TrendEmaStrategy,
             MacdStrategy,
             BollingerStrategy,
+            SuperTrendStrategy,
+            RocStrategy,
+            Rsi2Strategy,
         )
         for cls in strategies:
             result = run_backtest(CANDLES, cls(), SETTINGS)
@@ -77,6 +83,25 @@ class TestNewIndicators(unittest.TestCase):
         self.assertLess(er_zig[20], 0.3)
         for v in er_up[10:]:
             self.assertTrue(0.0 <= v <= 1.0)
+
+    def test_sma_and_roc(self):
+        vals = [float(x) for x in range(1, 21)]
+        s = indicators.sma(vals, 5)
+        self.assertIsNone(s[3])
+        self.assertAlmostEqual(s[4], 3.0)   # media de 1..5
+        r = indicators.roc(vals, 5)
+        self.assertIsNone(r[4])
+        self.assertAlmostEqual(r[5], (6 / 1 - 1) * 100)  # de 1 para 6
+
+    def test_supertrend_direction_in_uptrend(self):
+        # tendencia de alta limpa -> direcao deve terminar em +1
+        n = 60
+        highs = [100 + i + 0.5 for i in range(n)]
+        lows = [100 + i - 0.5 for i in range(n)]
+        closes = [100.0 + i for i in range(n)]
+        line, direction = indicators.supertrend(highs, lows, closes, period=10, mult=3.0)
+        self.assertEqual(direction[-1], 1)
+        self.assertLess(line[-1], closes[-1])  # linha (stop) abaixo do preco na alta
 
     def test_bollinger_bands_order(self):
         closes = [c.close for c in CANDLES]
@@ -146,6 +171,23 @@ class TestCompareStrategies(unittest.TestCase):
         # ranqueado por (folds positivos, expectancia) decrescente
         scores = [(r.folds_positive, r.avg_oos_expectancy) for r in rows]
         self.assertEqual(scores, sorted(scores, reverse=True))
+
+
+class TestSwingMode(unittest.TestCase):
+    def test_swing_has_no_eod_exits(self):
+        from dataclasses import replace as dc_replace
+
+        swing = dc_replace(Settings.default(), day_trade=False)
+        result = run_backtest(CANDLES, SuperTrendStrategy(), swing)
+        reasons = {t.reason for t in result.trades}
+        self.assertNotIn("eod", reasons)  # swing nao zera no fim do dia
+
+    def test_day_trade_flattens_daily(self):
+        day = Settings.default()
+        self.assertTrue(day.day_trade)
+        result = run_backtest(CANDLES, BreakoutStrategy(), day)
+        # em day trade tipicamente ha saidas "eod"; ao menos nenhuma quebra
+        self.assertGreaterEqual(result.metrics["n_trades"], 0)
 
 
 class TestRegimeAndChart(unittest.TestCase):

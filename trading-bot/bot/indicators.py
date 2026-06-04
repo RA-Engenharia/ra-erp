@@ -110,6 +110,79 @@ def bollinger(
     return mid, upper, lower
 
 
+def sma(values: list[float], period: int) -> list[float | None]:
+    """Media movel simples."""
+    n = len(values)
+    out: list[float | None] = [None] * n
+    if period <= 0:
+        return out
+    s = 0.0
+    for i, v in enumerate(values):
+        s += v
+        if i >= period:
+            s -= values[i - period]
+        if i >= period - 1:
+            out[i] = s / period
+    return out
+
+
+def roc(values: list[float], period: int = 12) -> list[float | None]:
+    """Rate of Change (%) -- momentum puro: variacao percentual em ``period``."""
+    n = len(values)
+    out: list[float | None] = [None] * n
+    for i in range(period, n):
+        prev = values[i - period]
+        out[i] = ((values[i] / prev) - 1.0) * 100.0 if prev != 0 else 0.0
+    return out
+
+
+def supertrend(
+    highs: list[float],
+    lows: list[float],
+    closes: list[float],
+    period: int = 10,
+    mult: float = 3.0,
+) -> tuple[list[float | None], list[int | None]]:
+    """SuperTrend -- seguidor de tendencia baseado em ATR.
+
+    Devolve (linha, direcao). direcao = +1 (alta) ou -1 (baixa). A linha serve
+    de stop dinamico que sobe na alta e desce na baixa.
+    """
+    n = len(closes)
+    line: list[float | None] = [None] * n
+    direction: list[int | None] = [None] * n
+    atr_v = atr(highs, lows, closes, period)
+    final_upper = final_lower = st_prev = None
+    for i in range(n):
+        if atr_v[i] is None:
+            continue
+        hl2 = (highs[i] + lows[i]) / 2.0
+        basic_upper = hl2 + mult * atr_v[i]
+        basic_lower = hl2 - mult * atr_v[i]
+        if final_upper is None:
+            fu, fl = basic_upper, basic_lower
+        else:
+            fu = basic_upper if (basic_upper < final_upper or closes[i - 1] > final_upper) else final_upper
+            fl = basic_lower if (basic_lower > final_lower or closes[i - 1] < final_lower) else final_lower
+
+        if st_prev is None or st_prev == final_upper:
+            # vinha em baixa (ou primeira barra): viramos para alta se rompe o topo
+            if closes[i] > fu:
+                st, d = fl, 1
+            else:
+                st, d = fu, -1
+        else:
+            # vinha em alta: viramos para baixa se perde o piso
+            if closes[i] < fl:
+                st, d = fu, -1
+            else:
+                st, d = fl, 1
+
+        line[i], direction[i] = st, d
+        final_upper, final_lower, st_prev = fu, fl, st
+    return line, direction
+
+
 def efficiency_ratio(values: list[float], period: int = 10) -> list[float | None]:
     """Efficiency Ratio (Kaufman) -- mede FORCA de tendencia, de 0 a 1.
 

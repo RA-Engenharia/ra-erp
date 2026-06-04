@@ -63,10 +63,10 @@ class LiveTrader:
     def on_candle(self, c: Candle) -> LiveUpdate:
         events: list[str] = []
 
-        # 1) virou o dia? zera a posicao do dia anterior (day trade) e reseta
-        #    as travas diarias de risco.
+        # 1) virou o dia? em day trade, zera a posicao do dia anterior; em swing,
+        #    segura. Em ambos, reseta as travas diarias de risco.
         if self._day is not None and c.day_index != self._day:
-            if self.broker.has_position():
+            if self.settings.day_trade and self.broker.has_position():
                 closed = self.broker.close(self._last_close, self._last_ts, "eod")
                 self.risk.on_trade_closed(closed.pnl)
                 self.trades.append(closed)

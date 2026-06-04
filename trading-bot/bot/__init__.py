@@ -31,6 +31,9 @@ from .strategies import (
     MacdStrategy,
     MeanReversionStrategy,
     RegimeFilteredStrategy,
+    RocStrategy,
+    Rsi2Strategy,
+    SuperTrendStrategy,
     TrendEmaStrategy,
 )
 from .strategy import EmaRsiAtrStrategy, Signal, Strategy
@@ -69,6 +72,9 @@ __all__ = [
     "MacdStrategy",
     "BollingerStrategy",
     "RegimeFilteredStrategy",
+    "SuperTrendStrategy",
+    "RocStrategy",
+    "Rsi2Strategy",
     "StrategySpec",
     "compare_strategies",
     "grid_search",
