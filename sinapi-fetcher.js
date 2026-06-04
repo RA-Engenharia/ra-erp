@@ -105,13 +105,18 @@ const parsePrecoUS = (v) => {
 // - Abas CSD/CCD (composições) e ISD/ICD (insumos), cada UF = coluna "Custo (R$)"
 // - Cabeçalho real ~linha 9, dados a partir da linha 10
 // - Linha com siglas de UF (AC, AL, ...) marca a coluna de cada custo
-const parseSinapiReferencia = (buf, uf) => {
+//
+// parseSinapiAmbos: extrai composições E insumos numa só passada. Retorna
+// { composicoes: [...], insumos: [...] }. É a base; parseSinapiReferencia
+// é mantido por compatibilidade (retorna composições, ou insumos se não houver).
+const parseSinapiAmbos = (buf, uf) => {
     if (!XLSX) throw new Error('xlsx lib não instalada');
     uf = (uf || 'MG').toUpperCase();
     const wb = XLSX.read(buf, { type: 'buffer' });
     const sheetsComposicoes = ['CSD', 'CCD']; // sem/com desoneração
     const sheetsInsumos = ['ISD', 'ICD'];
-    const out = [];
+    const composicoes = [];
+    const insumos = [];
 
     // Extrai o código real da fórmula HYPERLINK/MATCH da célula
     // (na SINAPI Referência o código fica embutido: HYPERLINK(...,104658) / MATCH(104658,...))
@@ -131,7 +136,7 @@ const parseSinapiReferencia = (buf, uf) => {
         return '';
     };
 
-    const processarSheet = (sheetName, ehComposicao) => {
+    const processarSheet = (sheetName, ehComposicao, target) => {
         const sheet = wb.Sheets[sheetName];
         if (!sheet) return 0;
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
@@ -168,6 +173,8 @@ const parseSinapiReferencia = (buf, uf) => {
         const colCodigo = hdr.findIndex(h => h.includes('código') || h.includes('codigo'));
         const colDesc = hdr.findIndex(h => h.includes('descri'));
         const colUnid = hdr.findIndex(h => h.includes('unidade'));
+        // Para insumos, há uma coluna "Tipo" (Material/Mão de Obra/Equipamento)
+        const colTipo = hdr.findIndex(h => h === 'tipo' || h.includes('tipo de insumo') || h.includes('classificação'));
         if (colCodigo < 0 || colDesc < 0) return 0;
 
         // 4. Extrai dados
@@ -184,32 +191,38 @@ const parseSinapiReferencia = (buf, uf) => {
             const unidade = String(r[colUnid >= 0 ? colUnid : 3] || '').trim();
             const custo = parsePrecoUS(r[ufCol]);
             if (codigo && codigo !== '0' && descricao && custo > 0) {
-                out.push({
+                const item = {
                     codigo, descricao, unidade,
                     custoUnitario: custo,
                     tipo: ehComposicao ? 'composicao' : 'insumo',
                     fonte: sheetName
-                });
+                };
+                // Classificação do insumo (Material / Mão de Obra / Equipamento)
+                if (!ehComposicao && colTipo >= 0) {
+                    const cls = String(r[colTipo] || '').trim().toUpperCase();
+                    if (cls) item.categoria = cls; // ex: "MATERIAL", "MAO DE OBRA", "EQUIPAMENTO"
+                }
+                target.push(item);
                 count++;
             }
         }
         return count;
     };
 
-    // Prioriza composições sem desoneração (CSD)
-    let total = 0;
+    // Composições: usa a primeira aba que funcionar (prioriza CSD sem desoneração)
     for (const sn of sheetsComposicoes) {
-        const n = processarSheet(sn, true);
-        if (n > 0) { total += n; break; } // usa a primeira que funcionar
+        if (processarSheet(sn, true, composicoes) > 0) break;
     }
-    // Se não houver composições, tenta insumos
-    if (total === 0) {
-        for (const sn of sheetsInsumos) {
-            const n = processarSheet(sn, false);
-            if (n > 0) { total += n; break; }
-        }
+    // Insumos: usa a primeira aba que funcionar (prioriza ISD)
+    for (const sn of sheetsInsumos) {
+        if (processarSheet(sn, false, insumos) > 0) break;
     }
-    return out;
+    return { composicoes, insumos };
+};
+
+const parseSinapiReferencia = (buf, uf) => {
+    const { composicoes, insumos } = parseSinapiAmbos(buf, uf);
+    return composicoes.length > 0 ? composicoes : insumos;
 };
 
 // Parser GENÉRICO (pra outras tabelas: SICRO, SEINFRA, SBC, ORSE)
@@ -426,20 +439,39 @@ const server = http.createServer(async (req, res) => {
 
                     console.log('[sinapi] parseando', alvo.entryName, '(UF=' + uf.toUpperCase() + ')');
                     const xlsxBuf = alvo.getData();
-                    const dados = parseXlsx(xlsxBuf, uf);
-                    if (dados.length === 0) throw new Error('Parser retornou 0 itens. XLSX pode ter layout diferente — abra ' + alvo.entryName + ' manualmente e verifique cabeçalhos.');
+
+                    // Extrai composições E insumos numa só passada
+                    let composicoes = [], insumos = [];
+                    try {
+                        const ambos = parseSinapiAmbos(xlsxBuf, uf);
+                        composicoes = ambos.composicoes;
+                        insumos = ambos.insumos;
+                    } catch (e) { /* cai no genérico abaixo */ }
+                    // Fallback genérico se não pegou composições no layout SINAPI
+                    if (composicoes.length === 0) composicoes = parseXlsx(xlsxBuf, uf);
+                    if (composicoes.length === 0 && insumos.length === 0) {
+                        throw new Error('Parser retornou 0 itens. XLSX pode ter layout diferente — abra ' + alvo.entryName + ' manualmente e verifique cabeçalhos.');
+                    }
 
                     // Cacheia tanto no mês solicitado quanto no mês real (pra GET /dados achar)
                     [mes, mesUsado].forEach(mm => {
                         const dir = path.join(CACHE_DIR, mm);
                         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-                        const arq = cacheFile(mm, uf.toUpperCase(), 'composicoes');
-                        fs.writeFileSync(arq, JSON.stringify({ mes: mesUsado, uf, tipo:'composicoes', count: dados.length, dados, fonte: arqOficial.url, arquivo: alvo.entryName }));
+                        fs.writeFileSync(
+                            cacheFile(mm, uf.toUpperCase(), 'composicoes'),
+                            JSON.stringify({ mes: mesUsado, uf, tipo: 'composicoes', count: composicoes.length, dados: composicoes, fonte: arqOficial.url, arquivo: alvo.entryName })
+                        );
+                        if (insumos.length > 0) {
+                            fs.writeFileSync(
+                                cacheFile(mm, uf.toUpperCase(), 'insumos'),
+                                JSON.stringify({ mes: mesUsado, uf, tipo: 'insumos', count: insumos.length, dados: insumos, fonte: arqOficial.url, arquivo: alvo.entryName })
+                            );
+                        }
                     });
-                    console.log('[sinapi] ok:', dados.length, 'composições (mês ' + mesUsado + ') →', cacheFile(mes, uf.toUpperCase(), 'composicoes'));
+                    console.log('[sinapi] ok:', composicoes.length, 'composições +', insumos.length, 'insumos (mês ' + mesUsado + ')');
 
                     res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ ok: true, count: dados.length, mesUsado, arquivoXlsx: alvo.entryName, fonteZip: arqOficial.url }));
+                    res.end(JSON.stringify({ ok: true, count: composicoes.length, countInsumos: insumos.length, mesUsado, arquivoXlsx: alvo.entryName, fonteZip: arqOficial.url }));
                 } catch (err) {
                     console.error('[sinapi] erro:', err.message);
                     res.writeHead(500, { 'Content-Type': 'application/json' });

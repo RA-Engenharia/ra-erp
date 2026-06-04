@@ -129859,6 +129859,29 @@ Use preços compatíveis com SINAPI ${regiao}, mês atual. Tipo: MAT=Material, M
                 if (typeof atualizarContadoresSINAPIBase === 'function') { try { atualizarContadoresSINAPIBase(); } catch(e){} }
                 console.log('[V72.57] ✅ SINAPI ' + mesMaisRecente + ' lançada: ' + json.dados.length + ' composições');
                 if (typeof toast === 'function') toast('✅ SINAPI ' + mesMaisRecente + ' atualizada: ' + json.dados.length + ' composições', 'success', { duration: 6000 });
+
+                // V72.59 — baixa também os INSUMOS individuais (mesmo ZIP, aba ISD).
+                // O backend já cacheou os insumos junto das composições no /baixar.
+                try {
+                    const resIns = await fetch(baseUrl + '/sinapi/dados?mes=' + mesMaisRecente + '&uf=' + uf + '&tipo=insumos');
+                    if (resIns.ok) {
+                        const jIns = await resIns.json();
+                        if (jIns.dados && jIns.dados.length) {
+                            // normaliza custoUnitario → preco (formato do db.sinapiInsumos)
+                            db.sinapiInsumos = jIns.dados.map(d => ({
+                                codigo: d.codigo, descricao: d.descricao,
+                                unidade: d.unidade, preco: d.custoUnitario || d.preco || 0,
+                                categoria: d.categoria || '', fonte: 'SINAPI ' + mesMaisRecente
+                            }));
+                            db.config.sinapiInsumosMes = mesMaisRecente;
+                            if (typeof saveData === 'function') saveData();
+                            if (window.persistirTabelasGrandes) await window.persistirTabelasGrandes();
+                            if (typeof renderSinapi === 'function') { try { renderSinapi(); } catch (e) {} }
+                            console.log('[V72.59] ✅ ' + db.sinapiInsumos.length + ' insumos SINAPI lançados');
+                            if (typeof toast === 'function') toast('✅ ' + db.sinapiInsumos.length + ' insumos SINAPI carregados', 'success', { duration: 5000 });
+                        }
+                    }
+                } catch (e) { console.warn('[V72.59] insumos:', e.message); }
             } catch (err) {
                 console.warn('[V72.57] Falha na atualização automática:', err.message);
                 if (opts.manual && typeof toast === 'function') toast('Falha ao baixar: ' + err.message, 'error');
@@ -130548,6 +130571,403 @@ node sinapi-fetcher.js</pre>
         }
 
         console.log('[V72.58] orçamento: reajuste em massa, KPIs vencimento, converter em obra wired up');
+    })();
+
+    // ════════════════════════════════════════════════════════════════════════════
+    // V72.59 — INSUMOS SINAPI INDIVIDUAIS + COMPOSITOR DE COMPOSIÇÕES PRÓPRIAS
+    //
+    // Hoje o sistema só usa composições (receitas prontas). Este bloco habilita
+    // trabalhar com os INSUMOS (matéria-prima: cimento, areia, pedreiro/hora,
+    // betoneira/hora...) e MONTAR composições próprias a partir deles — o que o
+    // orçamentista faz quando a SINAPI não tem o serviço exato.
+    //
+    // Entrega:
+    //   1) buscarInsumosSINAPI(termo, limite)  — busca na base de insumos
+    //   2) abrirNavegadorInsumos()             — explorador da base de insumos
+    //   3) abrirCompositorInsumos(orcId)       — monta composição própria:
+    //        - busca insumos, define coeficiente e categoria (MAT/MO/EQ)
+    //        - total por unidade da composição calculado ao vivo
+    //        - salva na base (db.sinapi, flag customizada) e/ou joga no orçamento
+    //   4) Botões injetados na tela SINAPI e no modal de orçamento
+    //
+    // A base de insumos vem do backend (auto-download, aba ISD) ou do importador
+    // manual já existente (importSinapiInsumos). Tudo idempotente.
+    // ════════════════════════════════════════════════════════════════════════════
+    (function() {
+        'use strict';
+
+        const _fmt59 = (v) => 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        // Categoria default por heurística no texto (quando o insumo não traz categoria)
+        const _adivinharCategoria = (ins) => {
+            const cat = (ins.categoria || '').toUpperCase();
+            if (cat.includes('OBRA') || cat.includes('MAO') || cat.includes('MÃO')) return 'MO';
+            if (cat.includes('EQUIP')) return 'EQ';
+            if (cat.includes('MATER')) return 'MAT';
+            const d = (ins.descricao || '').toUpperCase();
+            const un = (ins.unidade || '').toUpperCase();
+            // mão de obra costuma ser por H (hora) e citar encargos/profissões
+            if (/\b(H|HORA)\b/.test(un) && /(PEDREIRO|SERVENTE|ENCARGO|OFICIAL|AJUDANTE|CARPINTEIRO|ELETRICISTA|ENCANADOR|PINTOR|ARMADOR|MESTRE|ENGENHEIRO|MOTORISTA|OPERADOR)/.test(d)) return 'MO';
+            if (/(CHP|CHI|BETONEIRA|GUINDASTE|ESCAVADEIRA|RETROESCAVADEIRA|CAMINHAO|VIBRADOR|COMPRESSOR|GERADOR|GRUA|EQUIPAMENTO)/.test(d) || /\bCH[PI]\b/.test(un)) return 'EQ';
+            return 'MAT'; // padrão: material
+        };
+
+        // 1. Busca na base de insumos (db.sinapiInsumos preserva categoria;
+        //    fallback no buscarInsumosGlobal que unifica todas as fontes)
+        window.buscarInsumosSINAPI = function(termo, limite) {
+            limite = limite || 60;
+            termo = (termo || '').trim();
+            if (termo.length < 2) return [];
+            const tl = termo.toLowerCase();
+            const out = [];
+            const vistos = new Set();
+            (db.sinapiInsumos || []).forEach(ins => {
+                const cod = String(ins.codigo || '');
+                const desc = (ins.descricao || '').toLowerCase();
+                if (cod.toLowerCase().includes(tl) || desc.includes(tl)) {
+                    if (vistos.has(cod)) return;
+                    vistos.add(cod);
+                    out.push({
+                        codigo: cod, descricao: ins.descricao || '',
+                        unidade: ins.unidade || 'UN',
+                        preco: parseFloat(ins.preco != null ? ins.preco : ins.custoUnitario) || 0,
+                        categoria: _adivinharCategoria(ins)
+                    });
+                }
+            });
+            // fallback se a base de insumos própria estiver vazia
+            if (out.length === 0 && typeof buscarInsumosGlobal === 'function') {
+                try {
+                    (buscarInsumosGlobal(termo, limite) || []).forEach(ins => {
+                        const cod = String(ins.codigo || '');
+                        if (vistos.has(cod)) return;
+                        vistos.add(cod);
+                        out.push({
+                            codigo: cod, descricao: ins.descricao || '',
+                            unidade: ins.unidade || 'UN',
+                            preco: parseFloat(ins.preco) || 0,
+                            categoria: _adivinharCategoria(ins)
+                        });
+                    });
+                } catch (e) {}
+            }
+            return out.slice(0, limite);
+        };
+
+        // 2. NAVEGADOR DE INSUMOS — explorar a base, ver preços, jogar no compositor
+        window.abrirNavegadorInsumos = function() {
+            document.getElementById('navInsumosModal')?.remove();
+            const modal = document.createElement('div');
+            modal.id = 'navInsumosModal';
+            modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4';
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+            const totalBase = (db.sinapiInsumos || []).length;
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-boxes text-emerald-600 mr-2"></i>Insumos SINAPI</h3>
+                            <p class="text-xs text-slate-500 mt-0.5">${totalBase.toLocaleString('pt-BR')} insumos na base — matéria-prima para montar composições</p>
+                        </div>
+                        <button onclick="document.getElementById('navInsumosModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="p-4 border-b border-slate-200 dark:border-slate-700">
+                        <input id="navInsumoBusca" type="text" placeholder="🔍 Buscar insumo por código ou descrição (ex: cimento, areia, pedreiro)..." class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg">
+                        ${totalBase === 0 ? '<p class="text-xs text-amber-600 mt-2"><i class="fas fa-exclamation-triangle mr-1"></i>Base de insumos vazia. Use "Atualizar planilhas online" (com backend) ou o botão Insumos na tela SINAPI para importar um XLSX.</p>' : ''}
+                    </div>
+                    <div id="navInsumoResultados" class="p-4 overflow-auto flex-1">
+                        <div class="text-center text-slate-400 py-8"><i class="fas fa-search text-3xl mb-2 block opacity-30"></i>Digite ao menos 2 letras para buscar.</div>
+                    </div>
+                    <div class="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                        <span class="text-xs text-slate-500">Dica: clique em "Usar" para levar o insumo direto pro compositor.</span>
+                        <button onclick="document.getElementById('navInsumosModal').remove(); window.abrirCompositorInsumos();" class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold">
+                            <i class="fas fa-layer-group mr-1"></i>Criar composição
+                        </button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+
+            const catBadge = (c) => {
+                const map = { 'MAT': ['Material', 'bg-amber-100 text-amber-700'], 'MO': ['Mão de obra', 'bg-blue-100 text-blue-700'], 'EQ': ['Equipamento', 'bg-purple-100 text-purple-700'] };
+                const [txt, cls] = map[c] || map['MAT'];
+                return '<span class="px-1.5 py-0.5 rounded text-[10px] font-bold ' + cls + '">' + txt + '</span>';
+            };
+
+            const render = (termo) => {
+                const cont = document.getElementById('navInsumoResultados');
+                const res = window.buscarInsumosSINAPI(termo, 100);
+                if (!termo || termo.length < 2) {
+                    cont.innerHTML = '<div class="text-center text-slate-400 py-8"><i class="fas fa-search text-3xl mb-2 block opacity-30"></i>Digite ao menos 2 letras para buscar.</div>';
+                    return;
+                }
+                if (res.length === 0) {
+                    cont.innerHTML = '<div class="text-center text-slate-400 py-8">Nenhum insumo encontrado para "' + termo + '".</div>';
+                    return;
+                }
+                cont.innerHTML = `<table class="w-full text-sm">
+                    <thead class="text-xs uppercase text-slate-500 sticky top-0 bg-white dark:bg-slate-800">
+                        <tr><th class="p-2 text-left">Código</th><th class="p-2 text-left">Descrição</th><th class="p-2 text-center">Un</th><th class="p-2 text-center">Tipo</th><th class="p-2 text-right">Preço</th><th></th></tr>
+                    </thead>
+                    <tbody>${res.map(i => `
+                        <tr class="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                            <td class="p-2 font-mono text-xs text-emerald-600">${i.codigo}</td>
+                            <td class="p-2">${i.descricao}</td>
+                            <td class="p-2 text-center text-slate-500">${i.unidade}</td>
+                            <td class="p-2 text-center">${catBadge(i.categoria)}</td>
+                            <td class="p-2 text-right font-mono">${_fmt59(i.preco)}</td>
+                            <td class="p-2 text-right"><button onclick='window.compositorAddInsumo(${JSON.stringify(i).replace(/'/g, "&#39;")})' class="px-2 py-1 text-xs bg-emerald-600 text-white rounded">Usar</button></td>
+                        </tr>`).join('')}</tbody>
+                </table>`;
+            };
+
+            const inp = document.getElementById('navInsumoBusca');
+            let tmr;
+            inp.addEventListener('input', () => { clearTimeout(tmr); tmr = setTimeout(() => render(inp.value), 200); });
+            inp.focus();
+        };
+
+        // estado do compositor em memória
+        let _compInsumos = []; // { codigo, descricao, unidade, preco, categoria, coef }
+
+        // helper público: adiciona um insumo ao compositor (abre se fechado)
+        window.compositorAddInsumo = function(ins) {
+            if (!document.getElementById('compositorModal')) {
+                window.abrirCompositorInsumos();
+            }
+            document.getElementById('navInsumosModal')?.remove();
+            // evita duplicar: se já existe mesmo código, só soma coef
+            const existente = _compInsumos.find(x => x.codigo === ins.codigo);
+            if (existente) existente.coef = +(existente.coef + 1);
+            else _compInsumos.push({ ...ins, coef: 1 });
+            _compRenderLinhas();
+            if (typeof toast === 'function') toast('Insumo adicionado ao compositor', 'success');
+        };
+
+        const _compRenderLinhas = () => {
+            const tbody = document.getElementById('compLinhas');
+            if (!tbody) return;
+            let totMO = 0, totMAT = 0, totEQ = 0;
+            tbody.innerHTML = _compInsumos.map((it, idx) => {
+                const sub = (parseFloat(it.preco) || 0) * (parseFloat(it.coef) || 0);
+                if (it.categoria === 'MO') totMO += sub;
+                else if (it.categoria === 'EQ') totEQ += sub;
+                else totMAT += sub;
+                return `<tr class="border-b border-slate-100 dark:border-slate-700">
+                    <td class="p-2 font-mono text-xs text-emerald-600">${it.codigo}</td>
+                    <td class="p-2 text-xs">${it.descricao}</td>
+                    <td class="p-2 text-center text-xs text-slate-500">${it.unidade}</td>
+                    <td class="p-2 text-center">
+                        <select onchange="window.compositorSetCat(${idx}, this.value)" class="text-xs border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded px-1 py-0.5">
+                            <option value="MAT"${it.categoria === 'MAT' ? ' selected' : ''}>Material</option>
+                            <option value="MO"${it.categoria === 'MO' ? ' selected' : ''}>Mão de obra</option>
+                            <option value="EQ"${it.categoria === 'EQ' ? ' selected' : ''}>Equipamento</option>
+                        </select>
+                    </td>
+                    <td class="p-2 text-right"><input type="number" step="0.0001" value="${it.coef}" onchange="window.compositorSetCoef(${idx}, this.value)" class="w-20 text-right text-xs border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded px-1 py-0.5"></td>
+                    <td class="p-2 text-right text-xs font-mono">${_fmt59(it.preco)}</td>
+                    <td class="p-2 text-right text-xs font-mono font-bold">${_fmt59(sub)}</td>
+                    <td class="p-2 text-center"><button onclick="window.compositorRemove(${idx})" class="text-red-400 hover:text-red-600"><i class="fas fa-trash text-xs"></i></button></td>
+                </tr>`;
+            }).join('') || '<tr><td colspan="8" class="p-6 text-center text-slate-400">Nenhum insumo. Busque acima e adicione.</td></tr>';
+
+            const total = totMO + totMAT + totEQ;
+            const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+            set('compTotMO', _fmt59(totMO));
+            set('compTotMAT', _fmt59(totMAT));
+            set('compTotEQ', _fmt59(totEQ));
+            set('compTotGeral', _fmt59(total));
+        };
+
+        window.compositorSetCoef = function(idx, v) { if (_compInsumos[idx]) { _compInsumos[idx].coef = parseFloat(v) || 0; _compRenderLinhas(); } };
+        window.compositorSetCat = function(idx, v) { if (_compInsumos[idx]) { _compInsumos[idx].categoria = v; _compRenderLinhas(); } };
+        window.compositorRemove = function(idx) { _compInsumos.splice(idx, 1); _compRenderLinhas(); };
+
+        // 3. COMPOSITOR — monta uma composição própria a partir de insumos
+        window.abrirCompositorInsumos = function(orcId) {
+            document.getElementById('compositorModal')?.remove();
+            _compInsumos = [];
+            const modal = document.createElement('div');
+            modal.id = 'compositorModal';
+            modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4';
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+            const proxNum = ((db.sinapi || []).filter(c => c.customizada).length + 1);
+            const codigoSugerido = 'PROP-' + String(proxNum).padStart(3, '0');
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-layer-group text-emerald-600 mr-2"></i>Criar composição própria</h3>
+                            <p class="text-xs text-slate-500 mt-0.5">Monte a partir de insumos. O coeficiente é a quantidade de cada insumo por unidade da composição.</p>
+                        </div>
+                        <button onclick="document.getElementById('compositorModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="p-4 border-b border-slate-200 dark:border-slate-700 grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Código</label>
+                            <input id="compCodigo" value="${codigoSugerido}" class="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Descrição da composição</label>
+                            <input id="compDescricao" placeholder="ex: ALVENARIA DE TIJOLO MACIÇO 1 VEZ" class="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg">
+                        </div>
+                    </div>
+                    <div class="p-4 border-b border-slate-200 dark:border-slate-700 grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                        <div class="md:col-span-3 relative">
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Buscar insumo para adicionar</label>
+                            <input id="compBuscaInsumo" placeholder="🔍 cimento, areia, pedreiro, betoneira..." class="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg">
+                            <div id="compBuscaResultados" class="hidden absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg shadow-xl z-10 max-h-60 overflow-auto"></div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Unidade da composição</label>
+                            <input id="compUnidade" value="M2" class="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg">
+                        </div>
+                    </div>
+                    <div class="overflow-auto flex-1 p-4">
+                        <table class="w-full text-sm">
+                            <thead class="text-xs uppercase text-slate-500">
+                                <tr><th class="p-2 text-left">Código</th><th class="p-2 text-left">Insumo</th><th class="p-2 text-center">Un</th><th class="p-2 text-center">Categoria</th><th class="p-2 text-right">Coef.</th><th class="p-2 text-right">Preço un.</th><th class="p-2 text-right">Subtotal</th><th></th></tr>
+                            </thead>
+                            <tbody id="compLinhas"></tbody>
+                        </table>
+                    </div>
+                    <div class="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40">
+                        <div class="grid grid-cols-4 gap-3 text-sm mb-3">
+                            <div class="text-center"><div class="text-xs text-blue-500">Mão de obra</div><div id="compTotMO" class="font-bold font-mono text-blue-600">R$ 0,00</div></div>
+                            <div class="text-center"><div class="text-xs text-amber-500">Material</div><div id="compTotMAT" class="font-bold font-mono text-amber-600">R$ 0,00</div></div>
+                            <div class="text-center"><div class="text-xs text-purple-500">Equipamento</div><div id="compTotEQ" class="font-bold font-mono text-purple-600">R$ 0,00</div></div>
+                            <div class="text-center"><div class="text-xs text-emerald-600">Custo unitário</div><div id="compTotGeral" class="font-bold font-mono text-emerald-700 text-lg">R$ 0,00</div></div>
+                        </div>
+                        <div class="flex justify-end gap-2">
+                            <button onclick="document.getElementById('compositorModal').remove()" class="px-4 py-2 text-sm bg-slate-100 dark:bg-slate-700 dark:text-white rounded-lg">Cancelar</button>
+                            <button onclick="window.compositorSalvar(false)" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold"><i class="fas fa-save mr-1"></i>Salvar na base</button>
+                            <button onclick="window.compositorSalvar(true)" class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold"><i class="fas fa-plus mr-1"></i>Salvar e usar no orçamento</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            modal.dataset.orcId = orcId || '';
+            _compRenderLinhas();
+
+            // busca com dropdown
+            const inp = document.getElementById('compBuscaInsumo');
+            const drop = document.getElementById('compBuscaResultados');
+            let tmr;
+            inp.addEventListener('input', () => {
+                clearTimeout(tmr);
+                tmr = setTimeout(() => {
+                    const res = window.buscarInsumosSINAPI(inp.value, 30);
+                    if (!res.length) { drop.classList.add('hidden'); return; }
+                    drop.innerHTML = res.map(i => `
+                        <button type="button" onclick='window.compositorAddInsumo(${JSON.stringify(i).replace(/'/g, "&#39;")}); document.getElementById("compBuscaResultados").classList.add("hidden"); document.getElementById("compBuscaInsumo").value="";' class="w-full text-left px-3 py-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-sm border-b border-slate-100 dark:border-slate-600">
+                            <span class="font-mono text-xs text-emerald-600">${i.codigo}</span> ${i.descricao}
+                            <span class="text-xs text-slate-400">• ${i.unidade} • ${_fmt59(i.preco)}</span>
+                        </button>`).join('');
+                    drop.classList.remove('hidden');
+                }, 200);
+            });
+            document.addEventListener('click', (e) => {
+                if (drop && !drop.contains(e.target) && e.target !== inp) drop.classList.add('hidden');
+            });
+            inp.focus();
+        };
+
+        // 4. SALVAR composição própria
+        window.compositorSalvar = function(usarNoOrcamento) {
+            const codigo = (document.getElementById('compCodigo')?.value || '').trim();
+            const descricao = (document.getElementById('compDescricao')?.value || '').trim();
+            const unidade = (document.getElementById('compUnidade')?.value || 'UN').trim().toUpperCase();
+            if (!descricao) { if (typeof toast === 'function') toast('Informe a descrição da composição', 'warning'); return; }
+            if (!_compInsumos.length) { if (typeof toast === 'function') toast('Adicione ao menos 1 insumo', 'warning'); return; }
+
+            let custoMO = 0, custoMAT = 0, custoEQ = 0;
+            const itensComposicao = _compInsumos.map(it => {
+                const sub = (parseFloat(it.preco) || 0) * (parseFloat(it.coef) || 0);
+                if (it.categoria === 'MO') custoMO += sub;
+                else if (it.categoria === 'EQ') custoEQ += sub;
+                else custoMAT += sub;
+                return {
+                    codigo: it.codigo, descricao: it.descricao, unidade: it.unidade,
+                    coeficiente: parseFloat(it.coef) || 0, precoUnitario: parseFloat(it.preco) || 0,
+                    categoria: it.categoria, subtotal: +sub.toFixed(4)
+                };
+            });
+            const custoTotal = +(custoMO + custoMAT + custoEQ).toFixed(2);
+
+            // objeto compatível com db.sinapi (renderSinapi usa custoMO/MAT/EQ/Total)
+            const comp = {
+                codigo: codigo || ('PROP-' + Date.now()),
+                descricao, unidade,
+                custoMO: +custoMO.toFixed(2), custoMAT: +custoMAT.toFixed(2),
+                custoEQ: +custoEQ.toFixed(2), custoTotal,
+                custoUnitario: custoTotal,
+                preco: custoTotal,
+                fonte: 'PRÓPRIA',
+                customizada: true,
+                itensComposicao,
+                criadaEm: new Date().toISOString()
+            };
+
+            // grava na base (substitui se mesmo código próprio já existir)
+            db.sinapi = db.sinapi || [];
+            const idxExist = db.sinapi.findIndex(c => c.codigo === comp.codigo && c.customizada);
+            if (idxExist >= 0) db.sinapi[idxExist] = comp;
+            else db.sinapi.push(comp);
+
+            if (typeof saveData === 'function') saveData();
+            if (window.persistirTabelasGrandes) window.persistirTabelasGrandes();
+            if (typeof logAudit === 'function') logAudit('COMPOSICAO_PROPRIA_CRIADA', { codigo: comp.codigo, custoTotal, insumos: itensComposicao.length });
+            if (typeof renderSinapi === 'function') { try { renderSinapi(); } catch (e) {} }
+
+            if (usarNoOrcamento) {
+                // joga direto no orçamento em edição (itensOrcamentoAtual)
+                if (typeof itensOrcamentoAtual !== 'undefined') {
+                    const item = {
+                        id: 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                        numero: (itensOrcamentoAtual.length || 0) + 1,
+                        codigo: comp.codigo, descricao: comp.descricao, unidade: comp.unidade,
+                        quantidade: 1,
+                        custoMOUnit: comp.custoMO, custoMATUnit: comp.custoMAT,
+                        custoEQUnit: comp.custoEQ, custoTotalUnit: comp.custoTotal,
+                        fonte: 'PRÓPRIA', itensComposicao, etapa: '', etapaNome: ''
+                    };
+                    itensOrcamentoAtual.push(item);
+                    if (typeof renderItensOrcamento === 'function') { try { renderItensOrcamento(); } catch (e) {} }
+                    // garante que o modal de orçamento esteja aberto
+                    const mo = document.getElementById('modalOrcamentoSinapi');
+                    if (mo && mo.classList.contains('hidden') && typeof openModal === 'function') openModal('modalOrcamentoSinapi');
+                }
+            }
+
+            document.getElementById('compositorModal')?.remove();
+            if (typeof toast === 'function') toast('✅ Composição "' + comp.codigo + '" criada (' + _fmt59(custoTotal) + '/' + unidade + ')' + (usarNoOrcamento ? ' e adicionada ao orçamento' : ''), 'success', { duration: 6000 });
+        };
+
+        // 5. Injeta botões na tela SINAPI (Navegar Insumos / Criar Composição)
+        const _injetarBotoesSinapi = () => {
+            const view = document.getElementById('view-sinapi');
+            if (!view || view.querySelector('.btn-v59-compositor')) return;
+            // acha a barra de botões (div com flex gap no header)
+            const barra = view.querySelector('.flex.gap-2.flex-wrap');
+            if (!barra) return;
+            const btnNav = document.createElement('button');
+            btnNav.className = 'btn-v59-navinsumos btn-modern bg-emerald-600 hover:bg-emerald-700 text-white';
+            btnNav.innerHTML = '<i class="fas fa-boxes mr-2"></i>Navegar Insumos';
+            btnNav.setAttribute('onclick', 'window.abrirNavegadorInsumos()');
+            const btnComp = document.createElement('button');
+            btnComp.className = 'btn-v59-compositor btn-modern bg-teal-600 hover:bg-teal-700 text-white';
+            btnComp.innerHTML = '<i class="fas fa-layer-group mr-2"></i>Criar Composição';
+            btnComp.setAttribute('onclick', 'window.abrirCompositorInsumos()');
+            barra.appendChild(btnNav);
+            barra.appendChild(btnComp);
+        };
+
+        // tenta injetar agora e observa quando a view aparece
+        const _v59tentar = () => { try { _injetarBotoesSinapi(); } catch (e) {} };
+        _v59tentar();
+        let _v59n = 0;
+        const _v59itv = setInterval(() => { _v59n++; _injetarBotoesSinapi(); if (document.querySelector('.btn-v59-compositor') || _v59n > 40) clearInterval(_v59itv); }, 700);
+
+        console.log('[V72.59] insumos SINAPI + compositor de composições próprias carregado');
     })();
 
 </script>
