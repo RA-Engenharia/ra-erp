@@ -81,6 +81,7 @@
     <input id="capital" type="number" value="5000" title="Capital (R$)" />
     <button class="btn-primary" id="btnAnalisar">⚡ Analisar</button>
     <button class="btn-watch" id="btnVigiar">👁 Vigiar</button>
+    <button id="btnRadar">🔭 Radar</button>
     <button id="btnCarteira">📊 Carteira</button>
     <button id="btnExtrato">📒 Extrato</button>
   </div>
@@ -134,6 +135,13 @@
         <div class="kv"><div class="k">Expectância</div><div class="v" id="pExp">—</div></div>
       </div>
       <div id="eqchart" style="height:160px;margin-top:10px"></div>
+    </div>
+
+    <div class="card hide" id="panelRadar" style="margin-top:14px">
+      <h3 style="margin-top:0">🔭 Radar de oportunidades (pré-seleção técnica)</h3>
+      <table><thead><tr><th>Ativo</th><th>Preço</th><th>Var%</th><th>Tend.</th><th>RSI</th><th>Setup</th></tr></thead>
+      <tbody id="radarBody"></tbody></table>
+      <div style="font-size:11px;color:#8b97a8;margin-top:8px">Clique numa linha para analisar a fundo. “Setup” = cruzamento a favor da tendência (gatilho rápido), não garantia.</div>
     </div>
 
     <div class="card hide" id="panelCarteira" style="margin-top:14px">
@@ -276,10 +284,17 @@ function toggleWatch(){
   const b=$("btnVigiar");
   if(watch){ clearInterval(watch); watch=null; b.classList.remove("on"); b.textContent="👁 Vigiar"; setStatus("Vigia desligado."); return; }
   b.classList.add("on"); b.textContent="● Vigiando";
+  if(window.Notification && Notification.permission==="default") Notification.requestPermission();
+  let lastTs=0;
   const tick=async()=>{ await loadCandles(); loadIndicators(); const s=await atualizarSinal();
     const t=new Date().toLocaleTimeString("pt-BR");
-    setStatus(`● Vigiando ${curSymbol()} ${TF} — última checagem ${t}` + (s.action==="long"||s.action==="short"?` — 🔔 SINAL!`:""));
-    if(s.action==="long"||s.action==="short"){ try{new Audio("data:audio/wav;base64,UklGRl9vT19XQVZF").play()}catch(e){} } };
+    const hasSig=(s.action==="long"||s.action==="short");
+    setStatus(`● Vigiando ${curSymbol()} ${TF} — última checagem ${t}` + (hasSig?` — 🔔 SINAL!`:""));
+    if(hasSig && s.ts!==lastTs){
+      lastTs=s.ts;
+      try{new Audio("data:audio/wav;base64,UklGRl9vT19XQVZF").play()}catch(e){}
+      notify(`Sinal em ${curSymbol()}`, (s.action==="long"?"COMPRAR":"VENDER")+` @ ${money(s.entry)} | stop ${money(s.stop)} | alvo ${money(s.take)}`);
+    } };
   tick(); watch=setInterval(tick, 20000);
 }
 
@@ -371,6 +386,36 @@ async function carregarExtrato(){
   }catch(e){ setStatus("❌ "+e); }
 }
 
+async function carregarRadar(){
+  $("panelRadar").classList.remove("hide");
+  $("radarBody").innerHTML=`<tr><td colspan="6"><span class="spinner"></span> Varrendo o mercado…</td></tr>`;
+  setStatus(`<span class="spinner"></span> Radar varrendo ${TF}…`);
+  try{
+    const d=await (await fetch(`/api/radar?tf=${TF}`)).json();
+    const tcor={ALTA:"#16c784",BAIXA:"#ea3943",LATERAL:"#8b97a8"};
+    const scor={COMPRA:'<span class="pill COMPRAR">▲ COMPRA</span>',VENDA:'<span class="pill VENDER">▼ VENDA</span>',"—":'<span style="color:#8b97a8">—</span>'};
+    $("radarBody").innerHTML=d.radar.map(r=>
+      `<tr style="cursor:pointer" data-sym="${r.symbol}.SA">
+         <td><b>${r.symbol}</b></td>
+         <td>${money(r.price)}</td>
+         <td style="color:${r.change>=0?'#16c784':'#ea3943'}">${(r.change>=0?'+':'')+pct(r.change)}</td>
+         <td style="color:${tcor[r.trend]}">${r.trend}</td>
+         <td>${r.rsi!=null?r.rsi.toFixed(0):'—'}</td>
+         <td>${scor[r.setup]||r.setup}</td></tr>`).join("");
+    document.querySelectorAll("#radarBody tr").forEach(tr=>tr.onclick=()=>{
+      $("symbolCustom").value=tr.dataset.sym; analisar(); window.scrollTo({top:0,behavior:'smooth'});
+    });
+    const setups=d.radar.filter(r=>r.setup!=="—").length;
+    setStatus(`✅ Radar (${TF}): ${setups} ativo(s) com setup fresco. Clique para analisar.`);
+  }catch(e){ setStatus("❌ "+e); }
+}
+
+function notify(title, body){
+  try{
+    if(window.Notification && Notification.permission==="granted") new Notification(title,{body});
+  }catch(e){}
+}
+
 // eventos
 $("tfs").addEventListener("click",e=>{ if(!e.target.dataset.tf)return;
   document.querySelectorAll(".tf").forEach(b=>b.classList.remove("active"));
@@ -378,6 +423,7 @@ $("tfs").addEventListener("click",e=>{ if(!e.target.dataset.tf)return;
 $("btnAnalisar").onclick=analisar;
 $("btnVigiar").onclick=toggleWatch;
 $("btnCarteira").onclick=carregarCarteira;
+$("btnRadar").onclick=carregarRadar;
 $("btnExtrato").onclick=carregarExtrato;
 $("btnPerf").onclick=loadBacktest;
 $("symbol").onchange=()=>{ $("symbolCustom").value=""; loadCandles(); loadIndicators(); loadMTF(); };

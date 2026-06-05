@@ -345,6 +345,32 @@ def extrato():
     })
 
 
+@app.route("/api/radar")
+def radar():
+    from bot.radar import scan_asset
+    from bot.sources.yfinance_source import load_yfinance
+    tf = request.args.get("tf", "15m")
+    universe = [
+        "PETR4.SA", "VALE3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA", "WEGE3.SA",
+        "ABEV3.SA", "B3SA3.SA", "ITSA4.SA", "MGLU3.SA", "PETR3.SA", "RENT3.SA",
+        "PRIO3.SA", "SUZB3.SA", "GGBR4.SA", "BTC-USD", "ETH-USD",
+    ]
+    rows = []
+    for sym in universe:
+        try:
+            cs = load_yfinance(sym, period=_period(tf), interval=tf)
+            r = scan_asset(cs)
+            if r is None:
+                continue
+            r["symbol"] = sym.replace(".SA", "")
+            rows.append(r)
+        except Exception:
+            continue
+    # ordena: quem tem SETUP fresco primeiro, depois por forca (|score|)
+    rows.sort(key=lambda x: (x["setup"] != "—", abs(x.get("score") or 0)), reverse=True)
+    return jsonify({"radar": rows, "tf": tf})
+
+
 def main():
     print("=" * 56)
     print("  PAINEL DO ROBO -- abra no navegador:  http://127.0.0.1:5000")

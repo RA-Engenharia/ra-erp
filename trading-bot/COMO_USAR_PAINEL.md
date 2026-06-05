@@ -21,7 +21,15 @@ O navegador abre sozinho em **http://127.0.0.1:5000**.
 - **Ativo** — escolha na lista (PETR4, VALE3, BTC-USD…) ou digite o código
 - **5m / 15m / 1h / 1d** — o intervalo de tempo (timeframe)
 - **Capital (R$)** — quanto você considera para calcular a quantidade e o risco
-- Botões: **⚡ Analisar**, **👁 Vigiar**, **📊 Carteira**, **📒 Extrato**
+- Botões: **⚡ Analisar**, **👁 Vigiar**, **🔭 Radar**, **📊 Carteira**, **📒 Extrato**
+
+> **🔭 Radar** varre ~17 ativos de uma vez e mostra onde há **setup/tendência
+> agora** — clique numa linha para analisar aquele ativo a fundo. É uma
+> pré-seleção técnica rápida (acha onde focar), não uma garantia.
+>
+> **🔔 Notificações:** ao ligar o **Vigiar**, o navegador pede permissão para
+> avisar na área de trabalho quando aparecer sinal — assim você não precisa
+> ficar olhando a tela. Clique em “Permitir”.
 
 **Esquerda — o gráfico:**
 - Candles reais + **médias móveis** (EMA9 laranja, EMA21 azul)
