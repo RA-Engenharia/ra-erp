@@ -481,15 +481,18 @@ function checaAlerta(t){ const prev=notifiedTrades[t.id];
 /* ---------------- eventos ---------------- */
 $("tfs").addEventListener("click",e=>{ if(!e.target.dataset.tf)return;
   document.querySelectorAll(".tf").forEach(b=>b.classList.remove("active")); e.target.classList.add("active");
-  TF=e.target.dataset.tf; calibrated=false; series.setMarkers([]); loadCandles(); loadIndicators(); loadMTF(); });
+  TF=e.target.dataset.tf; calibrated=false; if(series)series.setMarkers([]); loadCandles(); loadIndicators(); loadMTF(); });
 $("btnAnalisar").onclick=analisar; $("btnVigiar").onclick=toggleWatch;
 $("btnPerf").onclick=loadBacktest; $("btnTrack").onclick=acompanhar;
-$("symbol").onchange=()=>{ $("symbolCustom").value=""; calibrated=false; series.setMarkers([]); loadCandles(); loadIndicators(); loadMTF(); };
-// botao minimizar em cada janela
+$("symbol").onchange=()=>{ $("symbolCustom").value=""; calibrated=false; if(series)series.setMarkers([]); loadCandles(); loadIndicators(); loadMTF(); };
+// botao minimizar em cada janela (robusto: nao quebra se o X estiver aninhado)
 document.querySelectorAll(".win-head").forEach(h=>{
-  const mn=document.createElement("span"); mn.className="mn"; mn.textContent="–"; mn.title="Minimizar";
-  mn.onclick=ev=>{ ev.stopPropagation(); h.parentElement.classList.toggle("collapsed"); };
-  h.insertBefore(mn, h.querySelector(".x"));
+  try{
+    const x=h.querySelector(".x");
+    const mn=document.createElement("span"); mn.className="mn"; mn.textContent="–"; mn.title="Minimizar";
+    mn.onclick=ev=>{ ev.stopPropagation(); h.parentElement.classList.toggle("collapsed"); };
+    if(x && x.parentElement===h) h.insertBefore(mn, x); else h.appendChild(mn);
+  }catch(e){}
 });
 $("btnReset").onclick=()=>{ try{localStorage.removeItem("ra_wins")}catch(e){}; location.reload(); };
 document.querySelectorAll(".wbtn").forEach(b=>b.onclick=()=>{ const open=toggleWin(b.dataset.win);
