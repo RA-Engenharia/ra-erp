@@ -1,7 +1,10 @@
-# Robô de Trading — Fase 1 (fundação)
+# Robô de Trading — plataforma completa (motor + cérebro + painel)
 
-Motor de trading automatizado em **Python puro** (sem dependências externas),
-com **gestão de risco no centro de tudo**. Roda offline, em qualquer máquina.
+Plataforma de trading com **gestão de risco no centro de tudo**: motor em
+**Python puro** (o núcleo roda sem dependências), 11 estratégias, cérebro que
+combina e valida tudo, e um **painel web** com gráficos reais. Dados reais via
+`yfinance`/`ccxt` (opcionais). Sempre **paper trading** — mostra sinais, não
+envia ordem.
 
 > **Filosofia:** preservar o capital vem **antes** de lucrar. O sucesso é medido
 > por desempenho ajustado ao risco (drawdown, Sharpe), não por "quanto rendeu".
@@ -92,23 +95,47 @@ python3 examples/fetch_yfinance.py AAPL 60d 5m   # baixa, testa e valida
 
 | Arquivo | Papel |
 |---|---|
-| `bot/config.py` | **Parâmetros de risco** (o arquivo mais importante) |
+| `bot/config.py` | **Parâmetros de risco** (o arquivo mais importante) + custos/aluguel |
 | `bot/risk.py` | **O coração:** tamanho de posição + travas de risco |
-| `bot/strategy.py` | Estratégia base + EMA+RSI (padrão) — trocável |
-| `bot/strategies.py` | 11 estratégias (alta e baixa) + `RegimeFilteredStrategy` |
-| `bot/scanner.py` | Varre ativos/timeframes procurando vantagem real (com bar honesto) |
-| `bot/broker.py` | Corretora simulada com **custos e slippage reais** |
-| `bot/backtest.py` | Motor de backtest + métricas ajustadas ao risco |
-| `bot/validation.py` | **Anti-overfitting:** treino/teste, walk-forward, comparador, robustez entre regimes |
-| `bot/chart.py` | Curva de capital em ASCII (ver os drawdowns sem libs) |
+| `bot/indicators.py` | EMA, SMA, RSI, ATR, MACD, Bollinger, ROC, SuperTrend, Efficiency Ratio |
+| `bot/strategy.py` | Estratégia base + EMA+RSI (padrão) |
+| `bot/strategies.py` | 11 estratégias (alta/baixa) + `RegimeFilteredStrategy` (filtro de regime) |
+| `bot/broker.py` | Corretora simulada com **custos, slippage e aluguel de short reais** |
+| `bot/backtest.py` | Motor de backtest (day trade/swing) + métricas ajustadas ao risco |
+| `bot/validation.py` | **Anti-overfitting:** treino/teste, walk-forward, comparador, regimes |
+| `bot/scanner.py` | Varre ativos/timeframes procurando vantagem (com bar honesto) |
+| `bot/brain.py` | **Cérebro central:** comitê que combina estratégias robustas por voto |
 | `bot/live.py` | Paper trading **ao vivo**: candle a candle, sem lookahead |
-| `bot/feeds.py` | Fontes de candles: replay e **feed real** de corretora (ccxt) |
-| `bot/brain.py` | **Cérebro central:** comitê que combina todas as estratégias por voto |
-| `bot/sources/` | `DataSourceConfig` + `build_feed`: parâmetros de coleta em tempo real |
-| `bot/sources/` | Adaptadores de dados reais (ex.: `yfinance` para ações) |
-| `bot/indicators.py` | EMA, RSI, ATR em Python puro |
-| `bot/data.py` | Candles: gerador sintético + leitor de CSV |
-| `tests/` | Testes (risco e validação testados a fundo) |
+| `bot/feeds.py` | Fontes de candles: replay e **feed real** (ccxt) |
+| `bot/sources/` | `DataSourceConfig`/`build_feed` + adaptador `yfinance` (ações/ETFs/cripto) |
+| `bot/monitor.py` | Painel/resumo do ensaio (acertos, fator de lucro, curva) |
+| `bot/radar.py` | Raio-X técnico rápido (radar de oportunidades) |
+| `bot/signallog.py` | Extrato de sinais: registra e avalia (acerto/stop, R$) |
+| `bot/trademanager.py` | Gestão da operação aberta: PnL ao vivo + trailing stop |
+| `bot/chart.py` | Curva de capital em ASCII |
+| `bot/data.py` | Candles: gerador sintético/regimes + leitor de CSV |
+| `tests/` | **70 testes** (risco, validação, estratégias, painel) |
+
+---
+
+## 🚀 Ferramentas (atalhos)
+
+Depois de instalar (`setup.bat` no Windows / `bash setup.sh` no Linux/macOS):
+
+| Atalho | O que faz |
+|---|---|
+| **`painel.bat`** | **Painel web completo** (gráfico real, sinais, radar, extrato, gestão) |
+| `sinal.bat` | Sinal agora (compra/venda) com stop, alvo, quantidade e risco |
+| `vigia.bat` | Vigia um ativo e **avisa** quando aparece sinal |
+| `diario.bat` | Decisão do dia (swing) de um ativo |
+| `carteira.bat` | Decisão do cérebro na cesta de ações |
+| `monitor.bat` | Painel do histórico de operações simuladas |
+| `run.bat` | Análise rápida do cérebro num ativo |
+| `live_brain.bat` | Paper trading contínuo do cérebro |
+
+Guias: [`COMECE_AQUI.md`](COMECE_AQUI.md) (instalação) ·
+[`COMO_USAR_PAINEL.md`](COMO_USAR_PAINEL.md) (painel) ·
+[`PRIMEIROS_PASSOS.md`](PRIMEIROS_PASSOS.md) (detalhado).
 
 ---
 
@@ -145,20 +172,19 @@ Lições:
 
 ## Plano (roadmap)
 
-- [x] **Fase 1 — Fundação:** motor de risco + backtest + paper trading (offline)
-- [x] **Fase 2 — Dados reais + validação:** adaptador `yfinance` (ações EUA) e
-      motor anti-overfitting (treino/teste + walk-forward)
-- [~] **Fase 3 — Buscar a vantagem:** 4 estratégias (EMA+RSI, Breakout,
-      Reversão à média, EMA+tendência) + comparador que ranqueia por robustez
-      fora-da-amostra. Falta rodar nos **dados reais** e iterar com features novas.
-- [x] **Fase 4 — Paper trading ao vivo:** motor `live.py` (candle a candle, sem
-      lookahead) + adaptador de **feed real** de corretora em `feeds.py`
-      (`CcxtLiveFeed`, entrega só candles fechados). Veja `examples/run_live_ccxt.py`.
-- [ ] **Fase 5 — Dinheiro real:** trocar o PaperBroker por um broker que envie
-      ordens de verdade (mesma interface open/update/close), com extrema cautela
-      fictício por semanas
-- [ ] **Fase 5 — Go-live mínimo:** só depois de provado, capital pequeno,
-      escalando com evidência
+- [x] **Fase 1 — Fundação:** motor de risco + backtest + paper trading
+- [x] **Fase 2 — Dados reais + validação:** `yfinance`/`ccxt` + anti-overfitting
+      (treino/teste, walk-forward, teste de estresse)
+- [x] **Fase 3 — Buscar a vantagem:** 11 estratégias (alta/baixa) + filtro de
+      regime + comparador + scanner. Conclusão honesta dos dados reais: o swing
+      diário é o terreno mais robusto, mas o edge é **fino** (perto/abaixo do CDI)
+      — por isso a validação ao vivo é obrigatória antes de qualquer aposta.
+- [x] **Fase 4 — Paper trading ao vivo + painel:** `live.py` (sem lookahead),
+      feed real (`ccxt`/`yfinance`), **painel web** (gráficos, radar, gestão de
+      trade) e **extrato** que avalia os sinais em R$ — o validador honesto.
+- [ ] **Fase 5 — Dinheiro real (só depois de provado):** semanas de extrato
+      positivo e consistente → trocar o PaperBroker por execução real (mesma
+      interface), começando com o **mínimo** de capital e escalando com evidência.
 
 ---
 

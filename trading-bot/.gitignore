@@ -4,5 +4,6 @@ __pycache__/
 venv/
 *.csv
 !examples/*.csv
-data/*.csv
+# dados de execucao (sinais, trades, logs) -- nunca versionar
+data/
 .DS_Store
