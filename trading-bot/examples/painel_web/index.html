@@ -82,6 +82,7 @@
     <button class="btn-primary" id="btnAnalisar">⚡ Analisar</button>
     <button class="btn-watch" id="btnVigiar">👁 Vigiar</button>
     <button id="btnCarteira">📊 Carteira</button>
+    <button id="btnExtrato">📒 Extrato</button>
   </div>
 </header>
 
@@ -139,6 +140,18 @@
       <h3 style="margin-top:0">Carteira (swing diário)</h3>
       <table><thead><tr><th>Ação</th><th>Hoje</th><th>Comitê</th></tr></thead>
       <tbody id="carteiraBody"></tbody></table>
+    </div>
+
+    <div class="card hide" id="panelExtrato" style="margin-top:14px">
+      <h3 style="margin-top:0">Extrato de sinais — placar real</h3>
+      <div class="rows" style="margin-bottom:10px">
+        <div class="kv"><div class="k">Acertos (alvo)</div><div class="v take" id="exAcertos">—</div></div>
+        <div class="kv"><div class="k">Erros (stop)</div><div class="v stop" id="exErros">—</div></div>
+        <div class="kv"><div class="k">Taxa de acerto</div><div class="v" id="exTaxa">—</div></div>
+        <div class="kv"><div class="k">Em aberto</div><div class="v" id="exAbertos">—</div></div>
+      </div>
+      <table><thead><tr><th>Data</th><th>Ativo</th><th>Sinal</th><th>Entrada</th><th>Resultado</th></tr></thead>
+      <tbody id="extratoBody"></tbody></table>
     </div>
   </div>
 </main>
@@ -328,6 +341,27 @@ async function carregarCarteira(){
   }catch(e){ setStatus("❌ "+e); }
 }
 
+async function carregarExtrato(){
+  $("panelExtrato").classList.remove("hide");
+  setStatus(`<span class="spinner"></span> Avaliando os sinais registrados…`);
+  try{
+    const d = await (await fetch(`/api/extrato`)).json();
+    $("exAcertos").textContent=d.acertos;
+    $("exErros").textContent=d.erros;
+    $("exTaxa").textContent=d.taxa==null?"—":pct(d.taxa);
+    $("exAbertos").textContent=d.abertos;
+    const badge={alvo:'<span class="pill COMPRAR">✓ alvo</span>',
+                 stop:'<span class="pill VENDER">✗ stop</span>',
+                 aberto:'<span class="pill AGUARDAR">⏳ aberto</span>'};
+    const acao={long:"▲ COMPRA",short:"▼ VENDA"};
+    $("extratoBody").innerHTML = d.signals.length ? d.signals.map(s=>
+      `<tr><td>${s.datetime}</td><td>${s.symbol} ${s.tf}</td><td>${acao[s.action]||s.action}</td>
+       <td>${money(s.entry)}</td><td>${badge[s.result]||s.result}</td></tr>`).join("")
+      : `<tr><td colspan="5" style="color:#8b97a8">Sem sinais ainda. Ligue o “Vigiar” — cada sinal que aparecer entra aqui automaticamente.</td></tr>`;
+    setStatus(`✅ Extrato: ${d.acertos} acertos, ${d.erros} erros`+(d.taxa!=null?` (${pct(d.taxa)} de acerto)`:'')+`, ${d.abertos} em aberto.`);
+  }catch(e){ setStatus("❌ "+e); }
+}
+
 // eventos
 $("tfs").addEventListener("click",e=>{ if(!e.target.dataset.tf)return;
   document.querySelectorAll(".tf").forEach(b=>b.classList.remove("active"));
@@ -335,6 +369,7 @@ $("tfs").addEventListener("click",e=>{ if(!e.target.dataset.tf)return;
 $("btnAnalisar").onclick=analisar;
 $("btnVigiar").onclick=toggleWatch;
 $("btnCarteira").onclick=carregarCarteira;
+$("btnExtrato").onclick=carregarExtrato;
 $("btnPerf").onclick=loadBacktest;
 $("symbol").onchange=()=>{ $("symbolCustom").value=""; loadCandles(); loadIndicators(); loadMTF(); };
 

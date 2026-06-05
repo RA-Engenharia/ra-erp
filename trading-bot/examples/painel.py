@@ -41,13 +41,18 @@ from bot.strategies import (  # noqa: E402
     SuperTrendStrategy,
     TrendEmaStrategy,
 )
+from bot.signallog import append_signal, evaluate_outcome, read_signals, seen_keys  # noqa: E402
 from bot.validation import StrategySpec  # noqa: E402
 
+from datetime import datetime, timezone  # noqa: E402
+
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "painel_web")
+LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "signal_log.csv")
 app = Flask(__name__, static_folder=None)
 
 _brains: dict[tuple, dict] = {}   # (symbol, tf) -> {brain, settings}
 _lock = threading.Lock()
+_seen = seen_keys(LOG_PATH)        # sinais ja registrados (evita duplicar)
 CARTEIRA = ["B3SA3.SA", "PETR4.SA", "BBDC4.SA", "WEGE3.SA", "ITUB4.SA", "ABEV3.SA", "BBAS3.SA"]
 
 
@@ -149,6 +154,14 @@ def _signal_card(symbol, tf, capital):
         risk.begin()
         qty = int(risk.position_size(price, sig.stop))
         dist = abs(price - sig.stop)
+        # registra o sinal no extrato (uma vez por candle/acao)
+        append_signal(LOG_PATH, {
+            "ts": ts,
+            "datetime": datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%d/%m/%Y %H:%M"),
+            "symbol": symbol, "tf": tf, "action": sig.action,
+            "entry": round(price, 2), "stop": round(sig.stop, 2), "take": round(sig.take, 2),
+            "qty": qty, "reason": sig.reason,
+        }, _seen)
         return {
             "action": sig.action, "entry": price, "stop": sig.stop, "take": sig.take,
             "qty": qty, "risk_reais": round(qty * dist, 2),
@@ -282,6 +295,48 @@ def backtest():
             "n_trades": m.get("n_trades", 0),
         },
         "curve": curve, "start": capital,
+    })
+
+
+@app.route("/api/extrato")
+def extrato():
+    from bot.sources.yfinance_source import load_yfinance
+    sigs = read_signals(LOG_PATH)
+    groups: dict[tuple, list] = {}
+    for s in sigs:
+        groups.setdefault((s["symbol"], s["tf"]), []).append(s)
+    cache: dict[tuple, list] = {}
+    out = []
+    acertos = erros = abertos = 0
+    for (sym, tf), items in groups.items():
+        try:
+            if (sym, tf) not in cache:
+                cs = load_yfinance(sym, period=_period(tf), interval=tf)
+                cache[(sym, tf)] = [(int(c.ts), c.high, c.low) for c in cs]
+            data = cache[(sym, tf)]
+        except Exception:
+            data = []
+        for s in items:
+            ts = int(s["ts"])
+            fut = [(hi, lo) for (t, hi, lo) in data if t > ts]
+            res = evaluate_outcome(s["action"], float(s["entry"]), float(s["stop"]),
+                                   float(s["take"]), fut)
+            if res == "alvo":
+                acertos += 1
+            elif res == "stop":
+                erros += 1
+            else:
+                abertos += 1
+            out.append({
+                "datetime": s.get("datetime", ""), "symbol": sym.replace(".SA", ""),
+                "tf": tf, "action": s["action"], "entry": float(s["entry"]),
+                "stop": float(s["stop"]), "take": float(s["take"]), "result": res, "ts": ts,
+            })
+    out.sort(key=lambda x: x["ts"], reverse=True)
+    fechados = acertos + erros
+    return jsonify({
+        "signals": out[:150], "acertos": acertos, "erros": erros, "abertos": abertos,
+        "taxa": (acertos / fechados) if fechados else None, "total": len(sigs),
     })
 
 
