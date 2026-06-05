@@ -105,6 +105,36 @@
       <div id="committee"><div class="comm"><span class="no">Clique em “Analisar”.</span></div></div>
     </div>
 
+    <div class="card" id="panelTec" style="margin-top:14px">
+      <h3 style="margin-top:0">Leitura técnica (ao vivo)</h3>
+      <div class="rows" id="tecRows">
+        <div class="kv"><div class="k">RSI (14)</div><div class="v" id="iRsi">—</div></div>
+        <div class="kv"><div class="k">Volatilidade (ATR)</div><div class="v" id="iAtr">—</div></div>
+        <div class="kv"><div class="k">Força tendência</div><div class="v" id="iEr">—</div></div>
+        <div class="kv"><div class="k">Variação</div><div class="v" id="iChg">—</div></div>
+      </div>
+      <h3>Tendência por tempo (alinhamento)</h3>
+      <div id="mtf" style="display:flex;gap:8px;flex-wrap:wrap">
+        <span class="no" style="color:#8b97a8">—</span>
+      </div>
+    </div>
+
+    <div class="card" id="panelPerf" style="margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Desempenho (backtest)</h3>
+        <button id="btnPerf" style="padding:6px 10px">Calcular</button>
+      </div>
+      <div class="rows" id="perfRows" style="margin-top:10px">
+        <div class="kv"><div class="k">Retorno</div><div class="v" id="pRet">—</div></div>
+        <div class="kv"><div class="k">Acerto</div><div class="v" id="pWin">—</div></div>
+        <div class="kv"><div class="k">Fator de lucro</div><div class="v" id="pPf">—</div></div>
+        <div class="kv"><div class="k">Drawdown máx.</div><div class="v" id="pDd">—</div></div>
+        <div class="kv"><div class="k">Trades</div><div class="v" id="pN">—</div></div>
+        <div class="kv"><div class="k">Expectância</div><div class="v" id="pExp">—</div></div>
+      </div>
+      <div id="eqchart" style="height:160px;margin-top:10px"></div>
+    </div>
+
     <div class="card hide" id="panelCarteira" style="margin-top:14px">
       <h3 style="margin-top:0">Carteira (swing diário)</h3>
       <table><thead><tr><th>Ação</th><th>Hoje</th><th>Comitê</th></tr></thead>
@@ -120,6 +150,7 @@
 <script>
 const $ = id => document.getElementById(id);
 let TF = "15m", watch = null, series = null, chart = null, priceLines = [];
+let ema9series=null, ema21series=null, eqChart=null, eqSeries=null;
 
 function curSymbol(){ return ($("symbolCustom").value.trim() || $("symbol").value).toUpperCase(); }
 function setStatus(html){ $("status").innerHTML = html; }
@@ -136,8 +167,27 @@ function initChart(){
     upColor:"#16c784", downColor:"#ea3943", borderVisible:false,
     wickUpColor:"#16c784", wickDownColor:"#ea3943"
   });
+  ema9series = chart.addLineSeries({color:"#f5a623", lineWidth:1, priceLineVisible:false, lastValueVisible:false});
+  ema21series = chart.addLineSeries({color:"#3b82f6", lineWidth:1, priceLineVisible:false, lastValueVisible:false});
   new ResizeObserver(()=>chart.applyOptions({width:$("chart").clientWidth, height:$("chart").clientHeight}))
     .observe($("chart"));
+}
+
+function emaCalc(values, period){
+  const k=2/(period+1); const out=[]; let prev=null;
+  for(let i=0;i<values.length;i++){
+    if(i<period-1){ out.push(null); continue; }
+    if(prev===null){ let s=0; for(let j=i-period+1;j<=i;j++)s+=values[j]; prev=s/period; }
+    else prev=values[i]*k+prev*(1-k);
+    out.push(prev);
+  }
+  return out;
+}
+function updateEMAs(candles){
+  const closes=candles.map(c=>c.close);
+  const e9=emaCalc(closes,9), e21=emaCalc(closes,21);
+  ema9series.setData(candles.map((c,i)=>e9[i]!=null?{time:c.time,value:e9[i]}:null).filter(Boolean));
+  ema21series.setData(candles.map((c,i)=>e21[i]!=null?{time:c.time,value:e21[i]}:null).filter(Boolean));
 }
 
 async function loadCandles(){
@@ -145,6 +195,7 @@ async function loadCandles(){
   const d = await r.json();
   if(d.error){ setStatus("❌ "+d.error); return; }
   series.setData(d.candles);
+  updateEMAs(d.candles);
   chart.timeScale().fitContent();
 }
 
@@ -186,6 +237,7 @@ function renderCommittee(c){
 
 async function analisar(){
   await loadCandles();
+  loadIndicators(); loadMTF();
   setStatus(`<span class="spinner"></span> Calibrando o cérebro para ${curSymbol()} ${TF}… (1-2 min, só na 1ª vez)`);
   try{
     const cr = await (await fetch(`/api/calibrate?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json();
@@ -207,11 +259,61 @@ function toggleWatch(){
   const b=$("btnVigiar");
   if(watch){ clearInterval(watch); watch=null; b.classList.remove("on"); b.textContent="👁 Vigiar"; setStatus("Vigia desligado."); return; }
   b.classList.add("on"); b.textContent="● Vigiando";
-  const tick=async()=>{ await loadCandles(); const s=await atualizarSinal();
+  const tick=async()=>{ await loadCandles(); loadIndicators(); const s=await atualizarSinal();
     const t=new Date().toLocaleTimeString("pt-BR");
     setStatus(`● Vigiando ${curSymbol()} ${TF} — última checagem ${t}` + (s.action==="long"||s.action==="short"?` — 🔔 SINAL!`:""));
     if(s.action==="long"||s.action==="short"){ try{new Audio("data:audio/wav;base64,UklGRl9vT19XQVZF").play()}catch(e){} } };
   tick(); watch=setInterval(tick, 20000);
+}
+
+async function loadIndicators(){
+  try{
+    const d = await (await fetch(`/api/indicators?symbol=${curSymbol()}&tf=${TF}`)).json();
+    if(d.error) return;
+    const rsi=d.rsi;
+    $("iRsi").textContent = rsi!=null ? rsi.toFixed(0)+(rsi>70?" (sobrecompr.)":rsi<30?" (sobrevend.)":"") : "—";
+    $("iRsi").style.color = rsi>70?"#ea3943":rsi<30?"#16c784":"#e6edf3";
+    $("iAtr").textContent = d.atr_pct!=null ? pct(d.atr_pct) : "—";
+    const er=d.trend_strength;
+    $("iEr").textContent = er!=null ? (er>0.4?"forte":er<0.2?"fraca/lateral":"média")+" ("+er.toFixed(2)+")" : "—";
+    $("iChg").textContent = d.change!=null ? (d.change>=0?"+":"")+pct(d.change) : "—";
+    $("iChg").style.color = d.change>=0?"#16c784":"#ea3943";
+  }catch(e){}
+}
+async function loadMTF(){
+  try{
+    const d = await (await fetch(`/api/mtf?symbol=${curSymbol()}`)).json();
+    const color={ALTA:"#16c784",BAIXA:"#ea3943",LATERAL:"#8b97a8","—":"#8b97a8"};
+    $("mtf").innerHTML = d.mtf.map(t=>
+      `<span class="pill" style="background:${color[t.trend]}22;color:${color[t.trend]}">${t.tf}: ${t.trend}</span>`).join("");
+  }catch(e){}
+}
+function initEqChart(){
+  if(eqChart) return;
+  eqChart = LightweightCharts.createChart($("eqchart"),{
+    layout:{background:{color:"#141925"},textColor:"#8b97a8"},
+    grid:{vertLines:{color:"#1b2233"},horzLines:{color:"#1b2233"}},
+    timeScale:{timeVisible:false,borderColor:"#243049"}, rightPriceScale:{borderColor:"#243049"}
+  });
+  eqSeries = eqChart.addAreaSeries({lineColor:"#16c784",topColor:"rgba(22,199,132,.3)",bottomColor:"rgba(22,199,132,0)"});
+  new ResizeObserver(()=>eqChart.applyOptions({width:$("eqchart").clientWidth,height:160})).observe($("eqchart"));
+}
+async function loadBacktest(){
+  setStatus(`<span class="spinner"></span> Calculando desempenho histórico…`);
+  try{
+    const d = await (await fetch(`/api/backtest?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json();
+    if(d.error){ setStatus("❌ "+d.error); return; }
+    const m=d.metrics;
+    $("pRet").textContent=(m.total_return>=0?"+":"")+pct(m.total_return);
+    $("pRet").style.color=m.total_return>=0?"#16c784":"#ea3943";
+    $("pWin").textContent=pct(m.win_rate);
+    $("pPf").textContent=m.profit_factor==null?"∞":m.profit_factor;
+    $("pDd").textContent=pct(m.max_drawdown);
+    $("pN").textContent=m.n_trades;
+    $("pExp").textContent=money(m.expectancy);
+    initEqChart(); eqSeries.setData(d.curve); eqChart.timeScale().fitContent();
+    setStatus(`✅ Desempenho: ${m.n_trades} trades, retorno ${(m.total_return>=0?"+":"")+pct(m.total_return)} (backtest).`);
+  }catch(e){ setStatus("❌ "+e); }
 }
 
 async function carregarCarteira(){
@@ -233,10 +335,13 @@ $("tfs").addEventListener("click",e=>{ if(!e.target.dataset.tf)return;
 $("btnAnalisar").onclick=analisar;
 $("btnVigiar").onclick=toggleWatch;
 $("btnCarteira").onclick=carregarCarteira;
-$("symbol").onchange=()=>{ $("symbolCustom").value=""; loadCandles(); };
+$("btnPerf").onclick=loadBacktest;
+$("symbol").onchange=()=>{ $("symbolCustom").value=""; loadCandles(); loadIndicators(); loadMTF(); };
 
 initChart();
 loadCandles();
+loadIndicators();
+loadMTF();
 </script>
 </body>
 </html>

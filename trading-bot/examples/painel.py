@@ -192,6 +192,99 @@ def carteira():
     return jsonify({"carteira": out})
 
 
+@app.route("/api/indicators")
+def indicators_api():
+    from bot import indicators as ind
+    from bot.sources.yfinance_source import load_yfinance
+    symbol = request.args.get("symbol", "PETR4.SA")
+    tf = request.args.get("tf", "15m")
+    try:
+        cs = load_yfinance(symbol, period=_period(tf), interval=tf)
+    except Exception as exc:
+        return jsonify({"error": str(exc)[:120]}), 400
+    closes = [c.close for c in cs]
+    highs = [c.high for c in cs]
+    lows = [c.low for c in cs]
+    i = len(closes) - 1
+    price = closes[i]
+    atr = ind.atr(highs, lows, closes, 14)[i]
+    e50 = ind.ema(closes, 50)[i]
+    return jsonify({
+        "price": price,
+        "rsi": ind.rsi(closes, 14)[i],
+        "atr_pct": (atr / price) if atr else None,
+        "trend_strength": ind.efficiency_ratio(closes, 10)[i],
+        "ema9": ind.ema(closes, 9)[i],
+        "ema21": ind.ema(closes, 21)[i],
+        "ema50": e50,
+        "above_ema50": (price > e50) if e50 else None,
+        "change": (closes[i] / closes[i - 1] - 1) if i > 0 else 0,
+    })
+
+
+@app.route("/api/mtf")
+def mtf():
+    from bot import indicators as ind
+    from bot.sources.yfinance_source import load_yfinance
+    symbol = request.args.get("symbol", "PETR4.SA")
+    out = []
+    for tf in ("15m", "1h", "1d"):
+        trend = "—"
+        try:
+            cs = load_yfinance(symbol, period=_period(tf), interval=tf)
+            closes = [c.close for c in cs]
+            i = len(closes) - 1
+            ef, es, el = ind.ema(closes, 9)[i], ind.ema(closes, 21)[i], ind.ema(closes, 50)[i]
+            if None not in (ef, es, el):
+                if ef > es and closes[i] > el:
+                    trend = "ALTA"
+                elif ef < es and closes[i] < el:
+                    trend = "BAIXA"
+                else:
+                    trend = "LATERAL"
+        except Exception:
+            trend = "—"
+        out.append({"tf": tf, "trend": trend})
+    return jsonify({"mtf": out})
+
+
+@app.route("/api/backtest")
+def backtest():
+    from bot.backtest import run_backtest
+    from bot.sources.yfinance_source import load_yfinance
+    symbol = request.args.get("symbol", "PETR4.SA")
+    tf = request.args.get("tf", "15m")
+    capital = float(request.args.get("capital", 5000))
+    key = (symbol, tf)
+    if key not in _brains:
+        return jsonify({"error": "calibre primeiro (Analisar)"}), 400
+    settings = _brains[key]["settings"]
+    settings.risk.starting_equity = capital
+    try:
+        cs = load_yfinance(symbol, period=_period(tf), interval=tf)[:-1]
+        res = run_backtest(cs, _brains[key]["brain"], settings)
+    except Exception as exc:
+        return jsonify({"error": str(exc)[:160]}), 400
+    m = res.metrics
+    eq = res.equity_curve
+    step = max(1, len(eq) // 240)
+    curve = [{"time": int(t), "value": round(v, 2)} for j, (t, v) in enumerate(eq) if j % step == 0]
+    pf = m.get("profit_factor", 0)
+    return jsonify({
+        "metrics": {
+            "total_return": m.get("total_return", 0),
+            "final_equity": res.final_equity,
+            "win_rate": m.get("win_rate", 0),
+            "profit_factor": (None if pf == float("inf") else round(pf, 2)),
+            "max_drawdown": m.get("max_drawdown", 0),
+            "expectancy": round(m.get("expectancy", 0), 2),
+            "sharpe": round(m.get("sharpe", 0), 2),
+            "n_trades": m.get("n_trades", 0),
+        },
+        "curve": curve, "start": capital,
+    })
+
+
 def main():
     print("=" * 56)
     print("  PAINEL DO ROBO -- abra no navegador:  http://127.0.0.1:5000")
