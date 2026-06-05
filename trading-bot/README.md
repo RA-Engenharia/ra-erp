@@ -57,6 +57,13 @@ diário** é onde as estratégias clássicas têm vantagem mais robusta — veja
 
 Guia completo passo a passo: [`PRIMEIROS_PASSOS.md`](PRIMEIROS_PASSOS.md).
 
+### Painel web (interface gráfica)
+
+`painel.bat` abre uma interface no navegador com **gráfico de candles real**,
+sinais (comprar/vender com stop e alvo), leitura técnica ao vivo, análise
+multi-timeframe, desempenho (backtest) e o **extrato de sinais** (placar real,
+com resultado em R$). Guia de uso: [`COMO_USAR_PAINEL.md`](COMO_USAR_PAINEL.md).
+
 ### O "cérebro central" (ensemble)
 
 `bot/brain.py` junta todas as estratégias num **comitê**. Antes de operar, ele
