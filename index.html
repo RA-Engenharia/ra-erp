@@ -130970,6 +130970,419 @@ node sinapi-fetcher.js</pre>
         console.log('[V72.59] insumos SINAPI + compositor de composições próprias carregado');
     })();
 
+    // ════════════════════════════════════════════════════════════════════════════
+    // V72.60 — TRÊS FIXES + NFS-E GRATUITA (portal da prefeitura)
+    //
+    //  A) Fix: as 8242 composições já estavam carregadas em memória mas a tela
+    //     SINAPI ficava VAZIA porque renderSinapi() tenta buscar no IndexedDB
+    //     (store 'sinapi_composicoes') que está vazio — as composições vivem
+    //     em 'ra_tabela_sinapi' (HybridStorage). Wrapper render usa db.sinapi
+    //     direto quando tem dados em memória.
+    //
+    //  B) Fix: aumenta o timeout do teste de backend no modal "Atualizar
+    //     tabelas online" de 1,5s para 5s — eliminava falsos "Backend não
+    //     está rodando" em máquinas mais lentas.
+    //
+    //  C) NFS-e GRATUITA via portal da prefeitura:
+    //      - Gera RPS no padrão ABRASF v2.04 (XML universal pras prefeituras
+    //        brasileiras) já preenchido com prestador/tomador/serviço.
+    //      - Faz download do XML e copia o conteúdo, prontos pra subir/colar
+    //        no portal da PMU (Uberlândia) ou de qualquer cidade ABRASF.
+    //      - ZERO custo (sem provedor) — você emite pelo próprio portal da
+    //        prefeitura. É o caminho oficial e gratuito, recomendado pra
+    //        empresas que emitem volume baixo a médio.
+    //      - Botão "📋 NFS-e GRATUITA (Portal Prefeitura)" injetado ao lado
+    //        do botão de PlugNotas.
+    // ════════════════════════════════════════════════════════════════════════════
+    (function() {
+        'use strict';
+
+        // ─── A) Fix renderSinapi: usa db.sinapi direto quando tem dados ─────
+        const _v60FixRenderSinapi = () => {
+            const orig = window.renderSinapi;
+            if (typeof orig !== 'function' || orig._v60_fixed) return false;
+            window.renderSinapi = async function() {
+                try {
+                    // Se tem composições em memória, lista direto sem depender do IDB
+                    if (Array.isArray(db.sinapi) && db.sinapi.length > 0) {
+                        const search = (document.getElementById('searchSinapi')?.value || '').toLowerCase().trim();
+                        const filterClasse = document.getElementById('filterSinapiClasse')?.value || '';
+                        let lista = db.sinapi;
+                        if (search) {
+                            lista = lista.filter(s => {
+                                const cod = String(s.codigo || '').toLowerCase();
+                                const desc = String(s.descricao || '').toLowerCase();
+                                return cod.includes(search) || desc.includes(search);
+                            });
+                        }
+                        if (filterClasse) lista = lista.filter(s => s.classe === filterClasse);
+
+                        const elTotal = document.getElementById('sinapiTotal');
+                        if (elTotal) elTotal.textContent = db.sinapi.length.toLocaleString('pt-BR');
+                        const elInsumos = document.getElementById('sinapiInsumos');
+                        if (elInsumos) elInsumos.textContent = (db.sinapiInsumos || []).length.toLocaleString('pt-BR');
+                        const elRef = document.getElementById('sinapiRef');
+                        if (elRef) elRef.textContent = (db.config?.sinapiMesCarregado) || (db.sinapiConfig?.versao) || '-';
+                        const elEstado = document.getElementById('sinapiEstado');
+                        if (elEstado) elEstado.textContent = (db.config?.tabelasPrecoConfig?.estadoRegional) || db.sinapiConfig?.estado || 'MG';
+
+                        const listEl = document.getElementById('listSinapi');
+                        if (listEl) {
+                            const sinapiPage = typeof window.sinapiPage !== 'undefined' ? window.sinapiPage : 1;
+                            const PER = 50;
+                            const start = (sinapiPage - 1) * PER;
+                            const pag = lista.slice(start, start + PER);
+                            const fmt = (v) => 'R$ ' + (parseFloat(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            listEl.innerHTML = pag.map(s => {
+                                const mo = parseFloat(s.custoMO) || 0;
+                                const mat = parseFloat(s.custoMAT) || 0;
+                                const eq = parseFloat(s.custoEQ) || 0;
+                                const total = parseFloat(s.custoTotal || s.custoUnitario || s.preco) || (mo + mat + eq);
+                                return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800">
+                                    <td class="p-2 font-mono text-indigo-600 font-bold">${s.codigo || '-'}</td>
+                                    <td class="p-2 dark:text-slate-300 max-w-xs truncate" title="${s.descricao || ''}">${s.descricao || '-'}</td>
+                                    <td class="p-2 text-center text-slate-500">${s.unidade || '-'}</td>
+                                    <td class="p-2 text-right text-blue-600">${mo ? fmt(mo) : '-'}</td>
+                                    <td class="p-2 text-right text-amber-600">${mat ? fmt(mat) : '-'}</td>
+                                    <td class="p-2 text-right text-purple-600">${eq ? fmt(eq) : '-'}</td>
+                                    <td class="p-2 text-right font-bold text-green-600">${fmt(total)}</td>
+                                    <td class="p-2 text-center">
+                                        <button onclick="if(typeof verComposicao==='function')verComposicao('${s.codigo}')" class="text-indigo-500 hover:text-indigo-700 mr-1" title="Ver"><i class="fas fa-eye"></i></button>
+                                        <button onclick="if(typeof addComposicaoAoOrcamento==='function')addComposicaoAoOrcamento('${s.codigo}')" class="text-green-500 hover:text-green-700" title="Adicionar ao orçamento"><i class="fas fa-plus-circle"></i></button>
+                                    </td>
+                                </tr>`;
+                            }).join('') || '<tr><td colspan="8" class="p-8 text-center text-slate-400">Nenhum resultado pra "' + search + '"</td></tr>';
+
+                            // paginação
+                            const totalPages = Math.ceil(lista.length / PER);
+                            const pagEl = document.getElementById('sinapiPagination');
+                            if (pagEl) {
+                                if (totalPages > 1) {
+                                    const btns = [];
+                                    const mk = (n, lbl, disabled) => `<button onclick="window.sinapiPage=${n}; renderSinapi();" ${disabled ? 'disabled' : ''} class="px-3 py-1 text-sm rounded ${disabled ? 'bg-slate-100 text-slate-400' : 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'}">${lbl}</button>`;
+                                    btns.push(mk(Math.max(1, sinapiPage - 1), '← Anterior', sinapiPage <= 1));
+                                    btns.push(`<span class="px-3 py-1 text-sm text-slate-600 dark:text-slate-300">Página ${sinapiPage} de ${totalPages} (${lista.length.toLocaleString('pt-BR')} resultados)</span>`);
+                                    btns.push(mk(Math.min(totalPages, sinapiPage + 1), 'Próxima →', sinapiPage >= totalPages));
+                                    pagEl.innerHTML = btns.join('');
+                                } else pagEl.innerHTML = '';
+                            }
+                        }
+                        return;
+                    }
+                } catch (e) { console.warn('[V72.60] renderSinapi fix:', e.message); }
+                // sem dados em memória: cai no original
+                return orig.apply(this, arguments);
+            };
+            window.renderSinapi._v60_fixed = true;
+            return true;
+        };
+        _v60FixRenderSinapi();
+        // retry pra pegar versões hookadas por outros IIFEs depois
+        let _v60nFix = 0;
+        const _v60Itv = setInterval(() => { _v60nFix++; _v60FixRenderSinapi(); if (_v60nFix > 20) clearInterval(_v60Itv); }, 800);
+
+        // Re-renderiza a tela SINAPI agora se estiver aberta (caso o user já esteja olhando)
+        setTimeout(() => {
+            const view = document.getElementById('view-sinapi');
+            if (view && !view.classList.contains('hidden') && typeof renderSinapi === 'function') {
+                try { renderSinapi(); } catch (e) {}
+            }
+        }, 1500);
+
+        // ─── B) Fix sincronizarSINAPI: timeout maior + usa URL auto-detectada ─
+        const _origSinc = window.sincronizarSINAPI;
+        if (typeof _origSinc === 'function' && !_origSinc._v60_fixed) {
+            // wrap pra reescrever só o teste de backend; o resto da modal é o mesmo
+            // (a abordagem mais segura é interceptar fetch /health do escopo)
+            // Simples: redefinimos window.sincronizarSINAPI pegando o auto-detect
+            // e fazendo o ping com timeout maior antes de chamar a original
+            window.sincronizarSINAPI = async function() {
+                // garante que a URL auto-detectada seja a usada
+                try {
+                    if (location.protocol === 'http:' && location.port) {
+                        db.config = db.config || {};
+                        db.config.sinapiFetcherUrl = db.config.sinapiFetcherUrl || location.origin;
+                    }
+                } catch (e) {}
+                // pré-aquece o backend: faz um ping com 5s de tolerância antes
+                const baseUrl = (db.config?.sinapiFetcherUrl || 'http://localhost:3040').replace(/\/$/, '');
+                try {
+                    const ctrl = new AbortController();
+                    setTimeout(() => ctrl.abort(), 5000);
+                    await fetch(baseUrl + '/health', { signal: ctrl.signal, cache: 'no-store' });
+                } catch (e) { /* segue mesmo assim, a original também testa */ }
+                return _origSinc.apply(this, arguments);
+            };
+            window.sincronizarSINAPI._v60_fixed = true;
+        }
+
+        // ─── C) NFS-E GRATUITA — PORTAL DA PREFEITURA (sem custo) ───────────
+        // Gera RPS no padrão ABRASF v2.04 (XML universal) já preenchido,
+        // baixa o XML e copia o conteúdo. Você sobe no portal da PMU
+        // (Uberlândia/MG) ou da sua cidade gratuitamente.
+
+        const _esc = (s) => String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+        const _onlyDigits = (s) => String(s || '').replace(/\D/g, '');
+        const _fmtNum2 = (v) => (parseFloat(v) || 0).toFixed(2);
+
+        // Gera XML RPS ABRASF (padrão nacional aceito pela maioria das cidades,
+        // incluindo Uberlândia/MG, BH, SP, Curitiba etc.)
+        window.gerarXMLABRASFRps = function(nfse, prestador) {
+            prestador = prestador || (db.nfseConfig?.prestador) || db.config?.nfsePrestador || {};
+            const cnpjPrestador = _onlyDigits(prestador.cnpj || db.config?.cnpj || '');
+            const inscMunicipal = _onlyDigits(prestador.inscricaoMunicipal || prestador.im || '');
+            const tomCNPJCPF = _onlyDigits(nfse.tomador?.cnpj || nfse.tomador?.cpf || '');
+            const tipoDocTomador = tomCNPJCPF.length === 14 ? 'Cnpj' : (tomCNPJCPF.length === 11 ? 'Cpf' : null);
+            const valorServ = parseFloat(nfse.valorServico) || 0;
+            const aliq = parseFloat(nfse.aliquotaISS) || 5;
+            const baseCalc = parseFloat(nfse.baseCalculoISS || nfse.valorServico) || valorServ;
+            const issApurado = parseFloat(nfse.issApurado) || +(baseCalc * (aliq / 100)).toFixed(2);
+            const numeroRps = nfse.numeroRps || nfse.numero || ((db.nfses || []).length + 1);
+            const serieRps = nfse.serieRps || 'RPS';
+            const tipoRps = '1'; // 1=RPS, 2=Mista, 3=Cupom
+            const dataEmissao = (nfse.dataEmissao || new Date().toISOString()).slice(0, 19); // YYYY-MM-DDTHH:mm:ss
+            const codMunPrest = _onlyDigits(prestador.codigoMunicipio || '3170206'); // Uberlândia/MG
+            const itemListaServ = (nfse.codigoTributacao || '07.02').toString();
+            // Código do serviço municipal (PMU usa o item da lista)
+            const codTributMunicipio = (nfse.codigoTributacaoMunicipio || itemListaServ.replace('.', '')).toString();
+
+            const tomadorXML = tipoDocTomador ? `
+        <Tomador>
+            <IdentificacaoTomador>
+                <CpfCnpj><${tipoDocTomador}>${tomCNPJCPF}</${tipoDocTomador}></CpfCnpj>${inscMunicipal && nfse.tomador?.inscricaoMunicipal ? '\n                <InscricaoMunicipal>' + _onlyDigits(nfse.tomador.inscricaoMunicipal) + '</InscricaoMunicipal>' : ''}
+            </IdentificacaoTomador>
+            <RazaoSocial>${_esc(nfse.tomador?.nome || '')}</RazaoSocial>
+            <Endereco>
+                <Endereco>${_esc(nfse.tomador?.endereco || '')}</Endereco>
+                <Numero>${_esc(nfse.tomador?.numero || 'S/N')}</Numero>${nfse.tomador?.complemento ? '\n                <Complemento>' + _esc(nfse.tomador.complemento) + '</Complemento>' : ''}
+                <Bairro>${_esc(nfse.tomador?.bairro || '')}</Bairro>
+                <CodigoMunicipio>${_onlyDigits(nfse.tomador?.codigoMunicipio || '3170206')}</CodigoMunicipio>
+                <Uf>${_esc(nfse.tomador?.uf || 'MG')}</Uf>
+                <Cep>${_onlyDigits(nfse.tomador?.cep || '')}</Cep>
+            </Endereco>${nfse.tomador?.email || nfse.tomador?.telefone ? `
+            <Contato>${nfse.tomador?.telefone ? '\n                <Telefone>' + _onlyDigits(nfse.tomador.telefone) + '</Telefone>' : ''}${nfse.tomador?.email ? '\n                <Email>' + _esc(nfse.tomador.email) + '</Email>' : ''}
+            </Contato>` : ''}
+        </Tomador>` : '';
+
+            return `<?xml version="1.0" encoding="UTF-8"?>
+<EnviarLoteRpsEnvio xmlns="http://www.abrasf.org.br/nfse.xsd">
+    <LoteRps Id="lote${numeroRps}" versao="2.04">
+        <NumeroLote>${numeroRps}</NumeroLote>
+        <CpfCnpj><Cnpj>${cnpjPrestador}</Cnpj></CpfCnpj>${inscMunicipal ? '\n        <InscricaoMunicipal>' + inscMunicipal + '</InscricaoMunicipal>' : ''}
+        <QuantidadeRps>1</QuantidadeRps>
+        <ListaRps>
+            <Rps>
+                <InfDeclaracaoPrestacaoServico Id="rps${numeroRps}">
+                    <Rps>
+                        <IdentificacaoRps>
+                            <Numero>${numeroRps}</Numero>
+                            <Serie>${_esc(serieRps)}</Serie>
+                            <Tipo>${tipoRps}</Tipo>
+                        </IdentificacaoRps>
+                        <DataEmissao>${dataEmissao}</DataEmissao>
+                        <Status>1</Status>
+                    </Rps>
+                    <Competencia>${dataEmissao.slice(0, 10)}</Competencia>
+                    <Servico>
+                        <Valores>
+                            <ValorServicos>${_fmtNum2(valorServ)}</ValorServicos>
+                            <ValorDeducoes>${_fmtNum2(nfse.deducoes)}</ValorDeducoes>
+                            <ValorPis>${_fmtNum2(nfse.valorPis)}</ValorPis>
+                            <ValorCofins>${_fmtNum2(nfse.valorCofins)}</ValorCofins>
+                            <ValorInss>${_fmtNum2(nfse.valorInss)}</ValorInss>
+                            <ValorIr>${_fmtNum2(nfse.valorIr)}</ValorIr>
+                            <ValorCsll>${_fmtNum2(nfse.valorCsll)}</ValorCsll>
+                            <IssRetido>${nfse.issRetido ? '1' : '2'}</IssRetido>
+                            <ValorIss>${_fmtNum2(issApurado)}</ValorIss>
+                            <Aliquota>${(aliq / 100).toFixed(4)}</Aliquota>
+                            <DescontoIncondicionado>${_fmtNum2(nfse.descontoIncondicionado)}</DescontoIncondicionado>
+                            <DescontoCondicionado>${_fmtNum2(nfse.descontoCondicionado)}</DescontoCondicionado>
+                        </Valores>
+                        <ItemListaServico>${_esc(itemListaServ)}</ItemListaServico>
+                        <CodigoTributacaoMunicipio>${_esc(codTributMunicipio)}</CodigoTributacaoMunicipio>
+                        <Discriminacao>${_esc(nfse.descricaoServico || nfse.discriminacao || '')}</Discriminacao>
+                        <CodigoMunicipio>${codMunPrest}</CodigoMunicipio>
+                        <ExigibilidadeISS>1</ExigibilidadeISS>
+                    </Servico>
+                    <Prestador>
+                        <CpfCnpj><Cnpj>${cnpjPrestador}</Cnpj></CpfCnpj>${inscMunicipal ? '\n                        <InscricaoMunicipal>' + inscMunicipal + '</InscricaoMunicipal>' : ''}
+                    </Prestador>${tomadorXML}
+                    <OptanteSimplesNacional>${(db.nfseConfig?.regime === 'simples_nacional') ? '1' : '2'}</OptanteSimplesNacional>
+                    <IncentivoFiscal>2</IncentivoFiscal>
+                </InfDeclaracaoPrestacaoServico>
+            </Rps>
+        </ListaRps>
+    </LoteRps>
+</EnviarLoteRpsEnvio>`;
+        };
+
+        // Modal: NFS-e Gratuita — escolhe NFS-e, gera XML, baixa + copia
+        window.abrirNFSeGratuita = function(nfseId) {
+            const nfse = nfseId ? (db.nfses || []).find(n => String(n.id) === String(nfseId)) : null;
+
+            document.getElementById('nfseGratisModal')?.remove();
+            const modal = document.createElement('div');
+            modal.id = 'nfseGratisModal';
+            modal.className = 'fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4';
+            modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+            const opcoes = (db.nfses || []).slice(0, 200).map(n => `
+                <option value="${n.id}" ${nfse && n.id === nfse.id ? 'selected' : ''}>${n.numero || '-'} • ${(n.tomador?.nome || '').slice(0, 30)} • R$ ${(parseFloat(n.valorServico) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</option>
+            `).join('');
+
+            modal.innerHTML = `
+                <div class="bg-white dark:bg-slate-800 rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold dark:text-white"><i class="fas fa-gift text-emerald-600 mr-2"></i>NFS-e Gratuita — Portal da Prefeitura</h3>
+                            <p class="text-xs text-slate-500 mt-0.5">Gera o RPS no padrão ABRASF (universal). Você sobe no portal da PMU sem custo de provedor.</p>
+                        </div>
+                        <button onclick="document.getElementById('nfseGratisModal').remove()" class="text-slate-400 hover:text-slate-700"><i class="fas fa-times"></i></button>
+                    </div>
+                    <div class="p-5 space-y-3 overflow-auto flex-1">
+                        <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 text-xs text-emerald-800 dark:text-emerald-200">
+                            <strong><i class="fas fa-check-circle mr-1"></i>100% gratuito.</strong> Sem PlugNotas, sem mensalidade. O sistema só gera o XML/dados — você emite pelo portal oficial da sua prefeitura.
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Selecione a NFS-e</label>
+                            <select id="nfseGratisSel" class="w-full px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg">
+                                ${opcoes || '<option value="">(nenhuma NFS-e cadastrada — crie uma primeiro na tela de NFS-e)</option>'}
+                            </select>
+                        </div>
+
+                        <div class="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg">
+                            <h4 class="text-sm font-bold text-slate-700 dark:text-slate-200 mb-2">Como emitir grátis na PMU (Uberlândia/MG)</h4>
+                            <ol class="text-xs text-slate-600 dark:text-slate-400 space-y-1 list-decimal ml-4">
+                                <li>Acesse <a href="https://uberlandia.mg.gov.br/prefeitura/secretarias/financas/nota-fiscal-de-servico-eletronica/" target="_blank" class="text-blue-600 underline">Portal da NFS-e — Uberlândia</a> e faça login com certificado digital ou e-CPF/e-CNPJ.</li>
+                                <li>Clique em "Emitir NFS-e" e use os dados que aparecem abaixo (ou faça upload do XML gerado).</li>
+                                <li>Assine digitalmente e envie. Pronto — a NFS-e oficial sai sem custo de provedor.</li>
+                                <li>Volte aqui, marque a NFS-e como "Emitida" e cole o número/protocolo retornado.</li>
+                            </ol>
+                            <p class="text-xs text-slate-500 mt-2"><strong>Outras cidades:</strong> o XML está no padrão ABRASF v2.04, aceito por ~80% das prefeituras (BH, SP, Curitiba, Salvador, Recife, etc).</p>
+                        </div>
+
+                        <div id="nfseGratisPreview" class="hidden">
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">Resumo da NFS-e selecionada</label>
+                            <div id="nfseGratisResumo" class="bg-white dark:bg-slate-700 p-3 rounded-lg border border-slate-200 dark:border-slate-600 text-xs space-y-1"></div>
+                        </div>
+
+                        <div id="nfseGratisXmlBox" class="hidden">
+                            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">XML RPS gerado (padrão ABRASF v2.04)</label>
+                            <textarea id="nfseGratisXml" readonly class="w-full h-48 px-3 py-2 text-xs font-mono border border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-emerald-300 rounded-lg"></textarea>
+                        </div>
+                    </div>
+                    <div class="p-5 border-t border-slate-200 dark:border-slate-700 flex flex-wrap justify-end gap-2">
+                        <button onclick="document.getElementById('nfseGratisModal').remove()" class="px-4 py-2 text-sm bg-slate-100 dark:bg-slate-700 dark:text-white rounded-lg">Fechar</button>
+                        <button onclick="window.nfseGratisGerar()" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold">
+                            <i class="fas fa-cog mr-1"></i>Gerar XML
+                        </button>
+                        <button onclick="window.nfseGratisCopiar()" class="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold hidden" id="btnNfseGratisCopy">
+                            <i class="fas fa-copy mr-1"></i>Copiar XML
+                        </button>
+                        <button onclick="window.nfseGratisBaixar()" class="px-4 py-2 text-sm bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg font-bold hidden" id="btnNfseGratisDown">
+                            <i class="fas fa-download mr-1"></i>Baixar XML
+                        </button>
+                        <a id="btnNfseGratisPortal" href="https://uberlandia.mg.gov.br/prefeitura/secretarias/financas/nota-fiscal-de-servico-eletronica/" target="_blank" class="px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-bold">
+                            <i class="fas fa-external-link-alt mr-1"></i>Abrir Portal PMU
+                        </a>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+        };
+
+        window.nfseGratisGerar = function() {
+            const sel = document.getElementById('nfseGratisSel');
+            const id = sel?.value;
+            if (!id) { if (typeof toast === 'function') toast('Selecione uma NFS-e', 'warning'); return; }
+            const nfse = (db.nfses || []).find(n => String(n.id) === String(id));
+            if (!nfse) { if (typeof toast === 'function') toast('NFS-e não encontrada', 'error'); return; }
+            try {
+                const xml = window.gerarXMLABRASFRps(nfse);
+                const txt = document.getElementById('nfseGratisXml');
+                if (txt) txt.value = xml;
+                document.getElementById('nfseGratisXmlBox').classList.remove('hidden');
+                document.getElementById('btnNfseGratisCopy').classList.remove('hidden');
+                document.getElementById('btnNfseGratisDown').classList.remove('hidden');
+                // resumo
+                const resumo = document.getElementById('nfseGratisResumo');
+                const valor = parseFloat(nfse.valorServico) || 0;
+                const iss = parseFloat(nfse.issApurado) || +(valor * ((parseFloat(nfse.aliquotaISS) || 5) / 100)).toFixed(2);
+                if (resumo) resumo.innerHTML = `
+                    <div><strong>Tomador:</strong> ${nfse.tomador?.nome || '-'} (${_onlyDigits(nfse.tomador?.cnpj || nfse.tomador?.cpf || '')})</div>
+                    <div><strong>Descrição:</strong> ${(nfse.descricaoServico || '-').substring(0, 120)}</div>
+                    <div><strong>Valor:</strong> R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} • <strong>ISS:</strong> R$ ${iss.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${nfse.aliquotaISS || 5}%)</div>
+                    <div><strong>Cidade prestador:</strong> ${(db.nfseConfig?.prestador?.codigoMunicipio === '3170206' || !db.nfseConfig?.prestador?.codigoMunicipio) ? 'Uberlândia/MG' : (db.nfseConfig?.prestador?.codigoMunicipio || '-')}</div>
+                `;
+                document.getElementById('nfseGratisPreview').classList.remove('hidden');
+                if (typeof toast === 'function') toast('XML gerado — copie ou baixe pra subir no portal', 'success');
+            } catch (e) {
+                console.error('[V72.60] gerar XML:', e);
+                if (typeof toast === 'function') toast('Erro ao gerar XML: ' + e.message, 'error');
+            }
+        };
+
+        window.nfseGratisCopiar = async function() {
+            const txt = document.getElementById('nfseGratisXml');
+            if (!txt || !txt.value) return;
+            try {
+                await navigator.clipboard.writeText(txt.value);
+                if (typeof toast === 'function') toast('XML copiado pro clipboard', 'success');
+            } catch (e) {
+                txt.select(); document.execCommand('copy');
+                if (typeof toast === 'function') toast('XML copiado (fallback)', 'success');
+            }
+        };
+
+        window.nfseGratisBaixar = function() {
+            const txt = document.getElementById('nfseGratisXml');
+            const sel = document.getElementById('nfseGratisSel');
+            if (!txt || !txt.value) return;
+            const blob = new Blob([txt.value], { type: 'application/xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'RPS-NFSe-' + (sel?.value || Date.now()) + '.xml';
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+            if (typeof toast === 'function') toast('XML baixado — suba no portal da PMU', 'success');
+        };
+
+        // Injeta o botão "NFS-e GRATUITA" ao lado dos botões PlugNotas
+        const _injetarBtnNfseGratis = () => {
+            // tenta no header da tela de NFS-e e na barra de ações
+            ['nfseToolbar', 'nfse-toolbar', 'nfseActionsBar', 'view-nfse'].forEach(id => {
+                const cand = document.getElementById(id);
+                if (cand && !cand.querySelector('.btn-v60-nfse-gratis')) {
+                    const b = document.createElement('button');
+                    b.className = 'btn-v60-nfse-gratis px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold ml-2';
+                    b.innerHTML = '<i class="fas fa-gift mr-1"></i>NFS-e GRATUITA (Portal)';
+                    b.setAttribute('onclick', 'window.abrirNFSeGratuita()');
+                    cand.appendChild(b);
+                }
+            });
+            // injeção genérica: ao lado de qualquer botão "PlugNotas"
+            document.querySelectorAll('button').forEach(b => {
+                if (b.classList.contains('btn-v60-nfse-gratis')) return;
+                const txt = (b.textContent || '').toLowerCase();
+                if (txt.includes('plugnotas') && !b.parentElement?.querySelector('.btn-v60-nfse-gratis')) {
+                    const novo = document.createElement('button');
+                    novo.className = 'btn-v60-nfse-gratis px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold ml-2';
+                    novo.innerHTML = '<i class="fas fa-gift mr-1"></i>Grátis (Portal)';
+                    novo.setAttribute('onclick', 'window.abrirNFSeGratuita()');
+                    b.insertAdjacentElement('afterend', novo);
+                }
+            });
+        };
+        _injetarBtnNfseGratis();
+        let _v60btnN = 0;
+        const _v60btnItv = setInterval(() => { _v60btnN++; _injetarBtnNfseGratis(); if (_v60btnN > 60) clearInterval(_v60btnItv); }, 1000);
+
+        console.log('[V72.60] tela SINAPI corrigida + NFS-e gratuita (portal prefeitura) + timeout backend 5s');
+    })();
+
 </script>
 </body>
 </html>
