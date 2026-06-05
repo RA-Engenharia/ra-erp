@@ -208,6 +208,29 @@ def carteira():
     return jsonify({"carteira": out})
 
 
+@app.route("/api/markers")
+def markers():
+    from bot.sources.yfinance_source import load_yfinance
+    symbol = request.args.get("symbol", "PETR4.SA")
+    tf = request.args.get("tf", "15m")
+    key = (symbol, tf)
+    if key not in _brains:
+        return jsonify({"markers": []})
+    try:
+        cs = load_yfinance(symbol, period=_period(tf), interval=tf)[:-1]
+        brain = _brains[key]["brain"]
+        brain.prepare(cs)
+    except Exception:
+        return jsonify({"markers": []})
+    out = []
+    start = max(0, len(cs) - 400)  # alinhado com os candles exibidos
+    for i in range(start, len(cs)):
+        sig = brain.signal(i)
+        if sig.action in ("long", "short"):
+            out.append({"time": int(cs[i].ts), "action": sig.action})
+    return jsonify({"markers": out})
+
+
 @app.route("/api/indicators")
 def indicators_api():
     from bot import indicators as ind

@@ -45,15 +45,19 @@
   /* ---------- janelas arrastaveis ---------- */
   .window{position:absolute;width:340px;background:var(--panel);border:1px solid var(--line);
     border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);z-index:10;display:flex;flex-direction:column;
-    max-height:82vh}
+    max-height:86vh;min-width:230px;min-height:64px;resize:both;overflow:hidden}
   .window.hide{display:none}
+  .window.collapsed{resize:none;height:auto!important;min-height:0}
+  .window.collapsed .win-body{display:none}
+  .win-head .mn{cursor:pointer;color:var(--muted);font-weight:700;padding:0 4px}
+  .win-head .mn:hover{color:var(--amber)}
   .win-head{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;
     background:var(--head);border-bottom:1px solid var(--line);border-radius:12px 12px 0 0;cursor:grab;user-select:none}
   .win-head:active{cursor:grabbing}
   .win-title{font-weight:700;font-size:13px}
   .win-head .x{cursor:pointer;color:var(--muted);font-weight:700;padding:0 4px}
   .win-head .x:hover{color:var(--red)}
-  .win-body{padding:12px;overflow:auto}
+  .win-body{padding:12px;overflow:auto;flex:1 1 auto}
 
   h3{margin:14px 0 7px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
   h3:first-child{margin-top:0}
@@ -94,6 +98,7 @@
     <option>ABEV3.SA</option><option>B3SA3.SA</option><option>BTC-USD</option><option>ETH-USD</option>
   </select>
   <input id="symbolCustom" placeholder="código…" />
+  <span id="ticker" style="font-weight:700;min-width:150px"></span>
   <div id="tfs" style="display:flex;gap:6px">
     <button class="tf" data-tf="5m">5m</button>
     <button class="tf active" data-tf="15m">15m</button>
@@ -230,7 +235,7 @@
 const $ = id => document.getElementById(id);
 let TF="15m", watch=null, series=null, chart=null, volSeries=null, priceLines=[];
 let ema9series=null, ema21series=null, eqChart=null, eqSeries=null;
-let lastSignal=null, notifiedTrades={}, lastCandles=[];
+let lastSignal=null, notifiedTrades={}, lastCandles=[], calibrated=false;
 const HEAD_H = ()=> $("toolbar").offsetHeight;
 
 function curSymbol(){ return ($("symbolCustom").value.trim() || $("symbol").value).toUpperCase(); }
@@ -322,9 +327,23 @@ async function loadCandles(){
   lastCandles=d.candles; series.setData(d.candles); updateEMAs(d.candles);
   volSeries.setData(d.candles.map(x=>({time:x.time,value:x.volume||0,color:x.close>=x.open?"rgba(22,199,132,.4)":"rgba(234,57,67,.4)"})));
   chart.timeScale().fitContent();
-  const last=d.candles[d.candles.length-1];
+  const last=d.candles[d.candles.length-1], prev=d.candles[d.candles.length-2];
   $("legSym").textContent=curSymbol()+" · "+TF;
   if(last) $("legOHLC").textContent=`O ${last.open.toFixed(2)} · H ${last.high.toFixed(2)} · L ${last.low.toFixed(2)} · C ${last.close.toFixed(2)}`;
+  if(last&&prev){ const ch=last.close/prev.close-1; const pos=ch>=0;
+    $("ticker").innerHTML=`${money(last.close)} <span style="color:${pos?'#16c784':'#ea3943'}">${pos?'▲':'▼'} ${(ch*100).toFixed(2)}%</span>`; }
+  loadMarkers();
+}
+async function loadMarkers(){
+  if(!calibrated){ series.setMarkers([]); return; }
+  try{
+    const d=await (await fetch(`/api/markers?symbol=${curSymbol()}&tf=${TF}`)).json();
+    series.setMarkers((d.markers||[]).map(m=>({time:m.time,
+      position:m.action==="long"?"belowBar":"aboveBar",
+      color:m.action==="long"?"#16c784":"#ea3943",
+      shape:m.action==="long"?"arrowUp":"arrowDown",
+      text:m.action==="long"?"C":"V"})));
+  }catch(e){}
 }
 function clearLines(){priceLines.forEach(l=>series.removePriceLine(l));priceLines=[];}
 function addLine(price,color,title){priceLines.push(series.createPriceLine({price,color,lineWidth:2,lineStyle:2,axisLabelVisible:true,title}));}
@@ -357,8 +376,8 @@ async function analisar(){
   try{
     const cr=await (await fetch(`/api/calibrate?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json();
     if(cr.error){ setStatus("❌ "+cr.error); return; }
-    renderCommittee(cr.committee); await atualizarSinal();
-    setStatus(cr.active===0?"Nenhuma estratégia robusta — o cérebro fica de fora.":`✅ Pronto. Comitê com ${cr.active} estratégia(s).`);
+    renderCommittee(cr.committee); calibrated=(cr.active>0); await atualizarSinal(); loadMarkers();
+    setStatus(cr.active===0?"Nenhuma estratégia robusta — o cérebro fica de fora.":`✅ Pronto. Comitê com ${cr.active} estratégia(s). Setas no gráfico = sinais.`);
   }catch(e){ setStatus("❌ "+e); }
 }
 async function atualizarSinal(){ const s=await (await fetch(`/api/signal?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json(); renderCard(s); return s; }
@@ -462,10 +481,16 @@ function checaAlerta(t){ const prev=notifiedTrades[t.id];
 /* ---------------- eventos ---------------- */
 $("tfs").addEventListener("click",e=>{ if(!e.target.dataset.tf)return;
   document.querySelectorAll(".tf").forEach(b=>b.classList.remove("active")); e.target.classList.add("active");
-  TF=e.target.dataset.tf; loadCandles(); loadIndicators(); loadMTF(); });
+  TF=e.target.dataset.tf; calibrated=false; series.setMarkers([]); loadCandles(); loadIndicators(); loadMTF(); });
 $("btnAnalisar").onclick=analisar; $("btnVigiar").onclick=toggleWatch;
 $("btnPerf").onclick=loadBacktest; $("btnTrack").onclick=acompanhar;
-$("symbol").onchange=()=>{ $("symbolCustom").value=""; loadCandles(); loadIndicators(); loadMTF(); };
+$("symbol").onchange=()=>{ $("symbolCustom").value=""; calibrated=false; series.setMarkers([]); loadCandles(); loadIndicators(); loadMTF(); };
+// botao minimizar em cada janela
+document.querySelectorAll(".win-head").forEach(h=>{
+  const mn=document.createElement("span"); mn.className="mn"; mn.textContent="–"; mn.title="Minimizar";
+  mn.onclick=ev=>{ ev.stopPropagation(); h.parentElement.classList.toggle("collapsed"); };
+  h.insertBefore(mn, h.querySelector(".x"));
+});
 $("btnReset").onclick=()=>{ try{localStorage.removeItem("ra_wins")}catch(e){}; location.reload(); };
 document.querySelectorAll(".wbtn").forEach(b=>b.onclick=()=>{ const open=toggleWin(b.dataset.win);
   if(open){ if(b.dataset.win==="win-radar")carregarRadar(); if(b.dataset.win==="win-carteira")carregarCarteira();
