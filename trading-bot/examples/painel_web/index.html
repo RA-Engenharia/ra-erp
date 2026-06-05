@@ -103,8 +103,17 @@
         <div class="kv"><div class="k">Quantidade</div><div class="v" id="vQty">—</div></div>
         <div class="kv"><div class="k">Você arrisca</div><div class="v" id="vRisk">—</div></div>
       </div>
+      <button id="btnTrack" class="btn-primary hide" style="width:100%;margin-top:12px">➕ Acompanhar esta operação</button>
       <h3>Comitê do cérebro</h3>
       <div id="committee"><div class="comm"><span class="no">Clique em “Analisar”.</span></div></div>
+    </div>
+
+    <div class="card hide" id="panelTrades" style="margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Minhas operações (ao vivo)</h3>
+        <span id="tradesTotal" style="font-weight:700">—</span>
+      </div>
+      <div id="tradesBody" style="margin-top:8px"></div>
     </div>
 
     <div class="card" id="panelTec" style="margin-top:14px">
@@ -176,6 +185,7 @@
 const $ = id => document.getElementById(id);
 let TF = "15m", watch = null, series = null, chart = null, priceLines = [];
 let ema9series=null, ema21series=null, eqChart=null, eqSeries=null;
+let lastSignal=null, notifiedTrades={};
 
 function curSymbol(){ return ($("symbolCustom").value.trim() || $("symbol").value).toUpperCase(); }
 function setStatus(html){ $("status").innerHTML = html; }
@@ -246,9 +256,11 @@ function renderCard(s){
     $("vQty").textContent=s.qty+" ações";
     $("vRisk").textContent=money(s.risk_reais);
     addLine(s.entry,"#3b82f6","entrada"); addLine(s.stop,"#ea3943","STOP"); addLine(s.take,"#16c784","alvo");
+    lastSignal={...s, symbol:curSymbol(), tf:TF}; $("btnTrack").classList.remove("hide");
   } else if(s.action==="wait"){
     badge.className="sig-badge sig-wait"; badge.textContent="AGUARDAR (sem sinal agora)";
     ["vEntry","vStop","vTake","vRR","vQty","vRisk"].forEach(i=>$(i).textContent="—");
+    $("btnTrack").classList.add("hide");
   } else if(s.action==="uncalibrated"){
     badge.className="sig-badge sig-wait"; badge.textContent="Clique em Analisar primeiro";
   } else if(s.error){ setStatus("❌ "+s.error); }
@@ -294,7 +306,8 @@ function toggleWatch(){
       lastTs=s.ts;
       try{new Audio("data:audio/wav;base64,UklGRl9vT19XQVZF").play()}catch(e){}
       notify(`Sinal em ${curSymbol()}`, (s.action==="long"?"COMPRAR":"VENDER")+` @ ${money(s.entry)} | stop ${money(s.stop)} | alvo ${money(s.take)}`);
-    } };
+    }
+    loadTrades(); };
   tick(); watch=setInterval(tick, 20000);
 }
 
@@ -410,6 +423,55 @@ async function carregarRadar(){
   }catch(e){ setStatus("❌ "+e); }
 }
 
+async function acompanhar(){
+  if(!lastSignal) return;
+  const s=lastSignal;
+  await fetch(`/api/trade/open?symbol=${s.symbol}&tf=${s.tf}&action=${s.action}&entry=${s.entry}&stop=${s.stop}&take=${s.take}&qty=${s.qty}`);
+  setStatus(`✅ Operação adicionada ao acompanhamento (${s.symbol}).`);
+  loadTrades();
+}
+async function loadTrades(silent){
+  try{
+    const d=await (await fetch(`/api/trade/list`)).json();
+    if(d.trades.length===0){ $("panelTrades").classList.add("hide"); return; }
+    $("panelTrades").classList.remove("hide");
+    const pos=d.total_pnl>=0;
+    $("tradesTotal").textContent=(pos?"+":"")+money(d.total_pnl);
+    $("tradesTotal").style.color=pos?"#16c784":"#ea3943";
+    const stcolor={alvo:"#16c784",stop:"#ea3943",aberta:"#8b97a8"};
+    const stlabel={alvo:"🎯 ALVO",stop:"🛑 STOP",aberta:"aberta"};
+    $("tradesBody").innerHTML=d.trades.map(t=>{
+      const lado=t.action==="long"?"▲ COMPRA":"▼ VENDA";
+      const move = t.move_stop ? `<div style="color:#f5a623;font-size:12px;margin-top:4px">↑ Proteja o lucro: suba o stop p/ ${money(t.suggested_stop)}</div>` : "";
+      return `<div class="kv" style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between">
+          <b>${t.symbol} ${lado}</b>
+          <span style="color:${t.pnl>=0?'#16c784':'#ea3943'};font-weight:700">${(t.pnl>=0?'+':'')+money(t.pnl)} (${t.profit_r>=0?'+':''}${t.profit_r}R)</span>
+        </div>
+        <div style="font-size:12px;color:#8b97a8;margin-top:3px">
+          entrada ${money(t.entry)} • atual ${money(t.price)} • stop ${money(t.stop)} • alvo ${money(t.take)}
+          • <span style="color:${stcolor[t.status]}">${stlabel[t.status]}</span></div>
+        ${move}
+        <button onclick="fecharTrade('${t.id}')" style="margin-top:6px;padding:4px 10px;font-size:12px">Fechar</button>
+      </div>`;
+    }).join("");
+    if(!silent){ d.trades.forEach(t=>checaAlerta(t)); }
+  }catch(e){}
+}
+async function fecharTrade(id){ await fetch(`/api/trade/close?id=${id}`); loadTrades(); }
+function checaAlerta(t){
+  const prev=notifiedTrades[t.id];
+  if(t.status!=="aberta" && prev!==t.status){
+    notifiedTrades[t.id]=t.status;
+    const msg = t.status==="alvo" ? `🎯 ALVO atingido em ${t.symbol}! Lucro ${money(t.pnl)}` : `🛑 STOP atingido em ${t.symbol}. ${money(t.pnl)}`;
+    notify("Operação "+t.symbol, msg);
+    try{new Audio("data:audio/wav;base64,UklGRl9vT19XQVZF").play()}catch(e){}
+  } else if(t.move_stop && prev!=="trail"){
+    notifiedTrades[t.id]="trail";
+    notify("Proteja o lucro — "+t.symbol, `Suba o stop para ${money(t.suggested_stop)}`);
+  }
+}
+
 function notify(title, body){
   try{
     if(window.Notification && Notification.permission==="granted") new Notification(title,{body});
@@ -426,12 +488,14 @@ $("btnCarteira").onclick=carregarCarteira;
 $("btnRadar").onclick=carregarRadar;
 $("btnExtrato").onclick=carregarExtrato;
 $("btnPerf").onclick=loadBacktest;
+$("btnTrack").onclick=acompanhar;
 $("symbol").onchange=()=>{ $("symbolCustom").value=""; loadCandles(); loadIndicators(); loadMTF(); };
 
 initChart();
 loadCandles();
 loadIndicators();
 loadMTF();
+loadTrades(true);
 </script>
 </body>
 </html>

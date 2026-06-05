@@ -42,12 +42,14 @@ from bot.strategies import (  # noqa: E402
     TrendEmaStrategy,
 )
 from bot.signallog import append_signal, evaluate_outcome, read_signals, realized_pnl, seen_keys  # noqa: E402
+from bot.trademanager import add_trade, load_trades, remove_trade, trade_status  # noqa: E402
 from bot.validation import StrategySpec  # noqa: E402
 
 from datetime import datetime, timezone  # noqa: E402
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "painel_web")
 LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "signal_log.csv")
+TRADES_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "open_trades.json")
 app = Flask(__name__, static_folder=None)
 
 _brains: dict[tuple, dict] = {}   # (symbol, tf) -> {brain, settings}
@@ -369,6 +371,46 @@ def radar():
     # ordena: quem tem SETUP fresco primeiro, depois por forca (|score|)
     rows.sort(key=lambda x: (x["setup"] != "—", abs(x.get("score") or 0)), reverse=True)
     return jsonify({"radar": rows, "tf": tf})
+
+
+@app.route("/api/trade/open")
+def trade_open():
+    trade = {
+        "symbol": request.args.get("symbol", "?"),
+        "tf": request.args.get("tf", "15m"),
+        "action": request.args.get("action", "long"),
+        "entry": float(request.args.get("entry", 0)),
+        "stop": float(request.args.get("stop", 0)),
+        "take": float(request.args.get("take", 0)),
+        "qty": float(request.args.get("qty", 0)),
+    }
+    return jsonify(add_trade(TRADES_PATH, trade))
+
+
+@app.route("/api/trade/close")
+def trade_close():
+    remove_trade(TRADES_PATH, request.args.get("id", ""))
+    return jsonify({"ok": True})
+
+
+@app.route("/api/trade/list")
+def trade_list():
+    from bot.sources.yfinance_source import load_yfinance
+    trades = load_trades(TRADES_PATH)
+    price_cache: dict[tuple, float] = {}
+    out = []
+    for t in trades:
+        key = (t["symbol"], t["tf"])
+        if key not in price_cache:
+            try:
+                cs = load_yfinance(t["symbol"], period=_period(t["tf"]), interval=t["tf"])
+                price_cache[key] = cs[-1].close
+            except Exception:
+                price_cache[key] = float(t["entry"])
+        st = trade_status(t, price_cache[key])
+        out.append({**t, **st})
+    total = round(sum(o["pnl"] for o in out), 2)
+    return jsonify({"trades": out, "total_pnl": total})
 
 
 def main():

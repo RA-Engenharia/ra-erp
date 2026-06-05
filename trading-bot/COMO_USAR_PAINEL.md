@@ -89,6 +89,22 @@ sinaliza com consenso.
 
 ---
 
+## 📌 Gestão da operação aberta (depois que você entrou)
+
+Quando aparece um sinal e você decide entrar, clique em
+**➕ Acompanhar esta operação**. Ela vai para o painel **Minhas operações**, que
+mostra **ao vivo**:
+- **Lucro/prejuízo em R$** e em **R** (múltiplo do risco)
+- **Status**: aberta / 🎯 ALVO / 🛑 STOP
+- **Trailing stop**: quando o lucro passa de **+1R**, sugere **subir o stop**
+  para proteger o ganho (não deixar virar prejuízo) — com aviso/notificação
+- Botão **Fechar** quando você sair da operação
+
+Com o **Vigiar** ligado, ele acompanha sozinho e te **notifica** quando bate o
+alvo, o stop, ou quando é hora de mover o stop.
+
+---
+
 ## ✅ O plano de validação honesta (faça isto antes de dinheiro real)
 
 1. Ligue o **👁 Vigiar** em 2-3 ações durante uns **30 pregões**.
