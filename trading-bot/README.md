@@ -48,6 +48,9 @@ isolado, instala as dependências e roda os testes:
 | Windows | `setup.bat` (dois cliques) | `run.bat` / `live_brain.bat` |
 | Linux/macOS | `bash setup.sh` | `bash run.sh` |
 
+**Atualizar para a versão mais nova:** rode **`atualizar.bat`** (Windows) ou
+`bash atualizar.sh` — baixa e atualiza tudo sozinho (preserva seus dados).
+
 `live_brain.bat` roda o **paper trading ao vivo** do cérebro (ordens simuladas,
 preços reais) — a etapa de ensaio antes de qualquer dinheiro real.
 `monitor.bat` mostra o **painel** do ensaio (acertos, fator de lucro, drawdown,
