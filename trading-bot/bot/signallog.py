@@ -66,3 +66,21 @@ def evaluate_outcome(action: str, entry: float, stop: float, take: float,
             if lo <= take:
                 return "alvo"
     return "aberto"
+
+
+def realized_pnl(action: str, entry: float, stop: float, take: float, qty: float,
+                 result: str, cost_pct: float = 0.0016) -> float:
+    """Resultado em R$ de um sinal ja resolvido (0 se ainda em aberto).
+
+    Desconta um custo de ida-e-volta (``cost_pct`` do valor da entrada,
+    ~0.16% = comissao + slippage) para nao superestimar o ganho.
+    """
+    if result == "alvo":
+        exit_p = take
+    elif result == "stop":
+        exit_p = stop
+    else:
+        return 0.0
+    gross = (exit_p - entry) * qty if action == "long" else (entry - exit_p) * qty
+    costs = entry * qty * cost_pct
+    return gross - costs

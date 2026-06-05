@@ -7,7 +7,13 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from bot.signallog import append_signal, evaluate_outcome, read_signals, seen_keys  # noqa: E402
+from bot.signallog import (  # noqa: E402
+    append_signal,
+    evaluate_outcome,
+    read_signals,
+    realized_pnl,
+    seen_keys,
+)
 
 
 class TestSignalLog(unittest.TestCase):
@@ -41,6 +47,19 @@ class TestSignalLog(unittest.TestCase):
         self.assertEqual(evaluate_outcome("short", 40, 41, 38, [(40.2, 37.9)]), "alvo")
         self.assertEqual(evaluate_outcome("short", 40, 41, 38, [(41.1, 39.5)]), "stop")
         self.assertEqual(evaluate_outcome("short", 40, 41, 38, [(40.5, 39)]), "aberto")
+
+
+    def test_realized_pnl(self):
+        # comprado 40 -> alvo 42, 100 acoes, sem custo: lucro 200
+        self.assertAlmostEqual(realized_pnl("long", 40, 39, 42, 100, "alvo", 0.0), 200.0)
+        # comprado 40 -> stop 39: prejuizo 100
+        self.assertAlmostEqual(realized_pnl("long", 40, 39, 42, 100, "stop", 0.0), -100.0)
+        # vendido 40 -> alvo 38: lucro 200
+        self.assertAlmostEqual(realized_pnl("short", 40, 41, 38, 100, "alvo", 0.0), 200.0)
+        # em aberto -> 0
+        self.assertEqual(realized_pnl("long", 40, 39, 42, 100, "aberto", 0.0), 0.0)
+        # com custo, o lucro fica MENOR que o bruto
+        self.assertLess(realized_pnl("long", 40, 39, 42, 100, "alvo", 0.0016), 200.0)
 
 
 if __name__ == "__main__":

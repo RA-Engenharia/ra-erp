@@ -150,7 +150,11 @@
         <div class="kv"><div class="k">Taxa de acerto</div><div class="v" id="exTaxa">—</div></div>
         <div class="kv"><div class="k">Em aberto</div><div class="v" id="exAbertos">—</div></div>
       </div>
-      <table><thead><tr><th>Data</th><th>Ativo</th><th>Sinal</th><th>Entrada</th><th>Resultado</th></tr></thead>
+      <div class="kv" style="margin-bottom:10px">
+        <div class="k">Resultado simulado (seguindo TODOS os sinais, já com custos)</div>
+        <div class="v" id="exPnl" style="font-size:22px">—</div>
+      </div>
+      <table><thead><tr><th>Data</th><th>Ativo</th><th>Sinal</th><th>Entrada</th><th>Resultado</th><th>R$</th></tr></thead>
       <tbody id="extratoBody"></tbody></table>
     </div>
   </div>
@@ -350,15 +354,20 @@ async function carregarExtrato(){
     $("exErros").textContent=d.erros;
     $("exTaxa").textContent=d.taxa==null?"—":pct(d.taxa);
     $("exAbertos").textContent=d.abertos;
+    const pos=d.total_pnl>=0;
+    $("exPnl").textContent=(pos?"+":"")+money(d.total_pnl);
+    $("exPnl").style.color=pos?"#16c784":"#ea3943";
     const badge={alvo:'<span class="pill COMPRAR">✓ alvo</span>',
                  stop:'<span class="pill VENDER">✗ stop</span>',
                  aberto:'<span class="pill AGUARDAR">⏳ aberto</span>'};
     const acao={long:"▲ COMPRA",short:"▼ VENDA"};
+    const cor=v=>v>0?"#16c784":v<0?"#ea3943":"#8b97a8";
     $("extratoBody").innerHTML = d.signals.length ? d.signals.map(s=>
       `<tr><td>${s.datetime}</td><td>${s.symbol} ${s.tf}</td><td>${acao[s.action]||s.action}</td>
-       <td>${money(s.entry)}</td><td>${badge[s.result]||s.result}</td></tr>`).join("")
-      : `<tr><td colspan="5" style="color:#8b97a8">Sem sinais ainda. Ligue o “Vigiar” — cada sinal que aparecer entra aqui automaticamente.</td></tr>`;
-    setStatus(`✅ Extrato: ${d.acertos} acertos, ${d.erros} erros`+(d.taxa!=null?` (${pct(d.taxa)} de acerto)`:'')+`, ${d.abertos} em aberto.`);
+       <td>${money(s.entry)}</td><td>${badge[s.result]||s.result}</td>
+       <td style="color:${cor(s.pnl)}">${s.pnl?(s.pnl>0?"+":"")+money(s.pnl):"—"}</td></tr>`).join("")
+      : `<tr><td colspan="6" style="color:#8b97a8">Sem sinais ainda. Ligue o “Vigiar” — cada sinal que aparecer entra aqui automaticamente.</td></tr>`;
+    setStatus(`✅ Extrato: ${d.acertos} acertos, ${d.erros} erros`+(d.taxa!=null?` (${pct(d.taxa)} de acerto)`:'')+`, resultado ${(d.total_pnl>=0?"+":"")+money(d.total_pnl)}.`);
   }catch(e){ setStatus("❌ "+e); }
 }
 

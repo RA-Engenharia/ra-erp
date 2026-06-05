@@ -41,7 +41,7 @@ from bot.strategies import (  # noqa: E402
     SuperTrendStrategy,
     TrendEmaStrategy,
 )
-from bot.signallog import append_signal, evaluate_outcome, read_signals, seen_keys  # noqa: E402
+from bot.signallog import append_signal, evaluate_outcome, read_signals, realized_pnl, seen_keys  # noqa: E402
 from bot.validation import StrategySpec  # noqa: E402
 
 from datetime import datetime, timezone  # noqa: E402
@@ -308,6 +308,7 @@ def extrato():
     cache: dict[tuple, list] = {}
     out = []
     acertos = erros = abertos = 0
+    total_pnl = 0.0
     for (sym, tf), items in groups.items():
         try:
             if (sym, tf) not in cache:
@@ -318,9 +319,12 @@ def extrato():
             data = []
         for s in items:
             ts = int(s["ts"])
+            entry, stop, take = float(s["entry"]), float(s["stop"]), float(s["take"])
+            qty = float(s.get("qty") or 0)
             fut = [(hi, lo) for (t, hi, lo) in data if t > ts]
-            res = evaluate_outcome(s["action"], float(s["entry"]), float(s["stop"]),
-                                   float(s["take"]), fut)
+            res = evaluate_outcome(s["action"], entry, stop, take, fut)
+            pnl = realized_pnl(s["action"], entry, stop, take, qty, res)
+            total_pnl += pnl
             if res == "alvo":
                 acertos += 1
             elif res == "stop":
@@ -329,14 +333,15 @@ def extrato():
                 abertos += 1
             out.append({
                 "datetime": s.get("datetime", ""), "symbol": sym.replace(".SA", ""),
-                "tf": tf, "action": s["action"], "entry": float(s["entry"]),
-                "stop": float(s["stop"]), "take": float(s["take"]), "result": res, "ts": ts,
+                "tf": tf, "action": s["action"], "entry": entry,
+                "stop": stop, "take": take, "result": res, "pnl": round(pnl, 2), "ts": ts,
             })
     out.sort(key=lambda x: x["ts"], reverse=True)
     fechados = acertos + erros
     return jsonify({
         "signals": out[:150], "acertos": acertos, "erros": erros, "abertos": abertos,
         "taxa": (acertos / fechados) if fechados else None, "total": len(sigs),
+        "total_pnl": round(total_pnl, 2),
     })
 
 
