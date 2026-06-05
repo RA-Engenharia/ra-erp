@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RA Robô — Painel</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#141925; --panel2:#1b2233; --line:#243049;
+    --txt:#e6edf3; --muted:#8b97a8; --green:#16c784; --red:#ea3943;
+    --blue:#3b82f6; --amber:#f5a623;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:Inter,Segoe UI,system-ui,Arial,sans-serif;font-size:14px}
+  header{display:flex;align-items:center;gap:14px;padding:12px 18px;
+    background:#10141f;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .logo{font-weight:800;font-size:18px;letter-spacing:.5px}
+  .logo span{color:var(--green)}
+  .ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  select,input,button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:13px;outline:none}
+  input{width:110px}
+  button{cursor:pointer;font-weight:600;transition:.15s}
+  button:hover{border-color:#3b4d72}
+  .tf{padding:8px 12px}
+  .tf.active{background:var(--blue);border-color:var(--blue)}
+  .btn-primary{background:var(--green);border-color:var(--green);color:#04130c}
+  .btn-primary:hover{filter:brightness(1.08)}
+  .btn-watch.on{background:var(--amber);border-color:var(--amber);color:#1a1200}
+  main{display:grid;grid-template-columns:1fr 360px;gap:14px;padding:14px}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  #chart{height:62vh;min-height:380px}
+  .sig-badge{font-size:26px;font-weight:800;text-align:center;padding:14px;border-radius:12px;margin-bottom:12px}
+  .sig-long{background:rgba(22,199,132,.15);color:var(--green);border:1px solid var(--green)}
+  .sig-short{background:rgba(234,57,67,.15);color:var(--red);border:1px solid var(--red)}
+  .sig-wait{background:rgba(139,151,168,.12);color:var(--muted);border:1px solid var(--line)}
+  .rows{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .kv{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px}
+  .kv .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  .kv .v{font-size:17px;font-weight:700;margin-top:3px}
+  .v.stop{color:var(--red)} .v.take{color:var(--green)} .v.entry{color:var(--blue)}
+  h3{margin:18px 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .comm{display:flex;justify-content:space-between;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px}
+  .comm .robust{color:var(--green);font-weight:700}
+  .comm .no{color:var(--muted)}
+  .status{font-size:12px;color:var(--muted);padding:6px 18px;border-top:1px solid var(--line)}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--line);
+    border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .disc{font-size:11px;color:var(--muted);padding:10px 16px;line-height:1.5}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}
+  .pill{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .pill.COMPRAR{background:rgba(22,199,132,.18);color:var(--green)}
+  .pill.VENDER{background:rgba(234,57,67,.18);color:var(--red)}
+  .pill.AGUARDAR{background:rgba(139,151,168,.15);color:var(--muted)}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">RA <span>Robô</span></div>
+  <div class="ctrl">
+    <select id="symbol">
+      <option>PETR4.SA</option><option>VALE3.SA</option><option>ITUB4.SA</option>
+      <option>BBDC4.SA</option><option>BBAS3.SA</option><option>WEGE3.SA</option>
+      <option>ABEV3.SA</option><option>B3SA3.SA</option><option>BTC-USD</option><option>ETH-USD</option>
+    </select>
+    <input id="symbolCustom" placeholder="ou digite o código" />
+  </div>
+  <div class="ctrl" id="tfs">
+    <button class="tf" data-tf="5m">5m</button>
+    <button class="tf active" data-tf="15m">15m</button>
+    <button class="tf" data-tf="1h">1h</button>
+    <button class="tf" data-tf="1d">1d</button>
+  </div>
+  <div class="ctrl">
+    <input id="capital" type="number" value="5000" title="Capital (R$)" />
+    <button class="btn-primary" id="btnAnalisar">⚡ Analisar</button>
+    <button class="btn-watch" id="btnVigiar">👁 Vigiar</button>
+    <button id="btnCarteira">📊 Carteira</button>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <div id="chart"></div>
+  </div>
+
+  <div>
+    <div class="card" id="panelSignal">
+      <div class="sig-badge sig-wait" id="badge">AGUARDANDO</div>
+      <div class="rows">
+        <div class="kv"><div class="k">Entrada</div><div class="v entry" id="vEntry">—</div></div>
+        <div class="kv"><div class="k">Ganho / Risco</div><div class="v" id="vRR">—</div></div>
+        <div class="kv"><div class="k">Stop (proteção)</div><div class="v stop" id="vStop">—</div></div>
+        <div class="kv"><div class="k">Alvo</div><div class="v take" id="vTake">—</div></div>
+        <div class="kv"><div class="k">Quantidade</div><div class="v" id="vQty">—</div></div>
+        <div class="kv"><div class="k">Você arrisca</div><div class="v" id="vRisk">—</div></div>
+      </div>
+      <h3>Comitê do cérebro</h3>
+      <div id="committee"><div class="comm"><span class="no">Clique em “Analisar”.</span></div></div>
+    </div>
+
+    <div class="card hide" id="panelCarteira" style="margin-top:14px">
+      <h3 style="margin-top:0">Carteira (swing diário)</h3>
+      <table><thead><tr><th>Ação</th><th>Hoje</th><th>Comitê</th></tr></thead>
+      <tbody id="carteiraBody"></tbody></table>
+    </div>
+  </div>
+</main>
+
+<div class="status" id="status">Pronto. Escolha o ativo e clique em <b>Analisar</b>.</div>
+<div class="disc">⚠️ Isto NÃO envia ordem — só mostra sinais. Você executa na sua corretora, sempre com o STOP.
+  Day trade intraday foi onde os testes não acharam vantagem; comece no papel, com dinheiro que pode perder.</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let TF = "15m", watch = null, series = null, chart = null, priceLines = [];
+
+function curSymbol(){ return ($("symbolCustom").value.trim() || $("symbol").value).toUpperCase(); }
+function setStatus(html){ $("status").innerHTML = html; }
+
+function initChart(){
+  chart = LightweightCharts.createChart($("chart"), {
+    layout:{ background:{color:"#141925"}, textColor:"#8b97a8" },
+    grid:{ vertLines:{color:"#1b2233"}, horzLines:{color:"#1b2233"} },
+    timeScale:{ timeVisible:true, secondsVisible:false, borderColor:"#243049" },
+    rightPriceScale:{ borderColor:"#243049" },
+    crosshair:{ mode:0 },
+  });
+  series = chart.addCandlestickSeries({
+    upColor:"#16c784", downColor:"#ea3943", borderVisible:false,
+    wickUpColor:"#16c784", wickDownColor:"#ea3943"
+  });
+  new ResizeObserver(()=>chart.applyOptions({width:$("chart").clientWidth, height:$("chart").clientHeight}))
+    .observe($("chart"));
+}
+
+async function loadCandles(){
+  const r = await fetch(`/api/candles?symbol=${curSymbol()}&tf=${TF}`);
+  const d = await r.json();
+  if(d.error){ setStatus("❌ "+d.error); return; }
+  series.setData(d.candles);
+  chart.timeScale().fitContent();
+}
+
+function clearLines(){ priceLines.forEach(l=>series.removePriceLine(l)); priceLines=[]; }
+function addLine(price,color,title){
+  priceLines.push(series.createPriceLine({price, color, lineWidth:2, lineStyle:2, axisLabelVisible:true, title}));
+}
+
+function money(v){ return "R$ "+Number(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function pct(v){ return (v*100).toFixed(1)+"%"; }
+
+function renderCard(s){
+  clearLines();
+  const badge=$("badge");
+  if(s.action==="long"||s.action==="short"){
+    const long=s.action==="long";
+    badge.className="sig-badge "+(long?"sig-long":"sig-short");
+    badge.textContent=(long?"▲ COMPRAR":"▼ VENDER")+"  ("+s.reason+")";
+    $("vEntry").textContent=money(s.entry);
+    $("vStop").textContent=money(s.stop)+"  ("+pct(s.risk_pct)+")";
+    $("vTake").textContent=money(s.take)+"  (+"+pct(s.reward_pct)+")";
+    $("vRR").textContent=s.rr.toFixed(1)+" : 1";
+    $("vQty").textContent=s.qty+" ações";
+    $("vRisk").textContent=money(s.risk_reais);
+    addLine(s.entry,"#3b82f6","entrada"); addLine(s.stop,"#ea3943","STOP"); addLine(s.take,"#16c784","alvo");
+  } else if(s.action==="wait"){
+    badge.className="sig-badge sig-wait"; badge.textContent="AGUARDAR (sem sinal agora)";
+    ["vEntry","vStop","vTake","vRR","vQty","vRisk"].forEach(i=>$(i).textContent="—");
+  } else if(s.action==="uncalibrated"){
+    badge.className="sig-badge sig-wait"; badge.textContent="Clique em Analisar primeiro";
+  } else if(s.error){ setStatus("❌ "+s.error); }
+}
+
+function renderCommittee(c){
+  $("committee").innerHTML = c.map(m=>
+    `<div class="comm"><span>${m.name} <small style="color:#8b97a8">(${m.folds}, R$ ${m.exp})</small></span>
+     <span class="${m.robust?'robust':'no'}">${m.robust?'✓ '+m.weight:'—'}</span></div>`).join("");
+}
+
+async function analisar(){
+  await loadCandles();
+  setStatus(`<span class="spinner"></span> Calibrando o cérebro para ${curSymbol()} ${TF}… (1-2 min, só na 1ª vez)`);
+  try{
+    const cr = await (await fetch(`/api/calibrate?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json();
+    if(cr.error){ setStatus("❌ "+cr.error); return; }
+    renderCommittee(cr.committee);
+    if(cr.active===0){ setStatus("Nenhuma estratégia robusta neste ativo — o cérebro fica de fora."); }
+    await atualizarSinal();
+    setStatus(`✅ Pronto. Comitê com ${cr.active} estratégia(s). Use “Vigiar” p/ atualizar sozinho.`);
+  }catch(e){ setStatus("❌ "+e); }
+}
+
+async function atualizarSinal(){
+  const s = await (await fetch(`/api/signal?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json();
+  renderCard(s);
+  return s;
+}
+
+function toggleWatch(){
+  const b=$("btnVigiar");
+  if(watch){ clearInterval(watch); watch=null; b.classList.remove("on"); b.textContent="👁 Vigiar"; setStatus("Vigia desligado."); return; }
+  b.classList.add("on"); b.textContent="● Vigiando";
+  const tick=async()=>{ await loadCandles(); const s=await atualizarSinal();
+    const t=new Date().toLocaleTimeString("pt-BR");
+    setStatus(`● Vigiando ${curSymbol()} ${TF} — última checagem ${t}` + (s.action==="long"||s.action==="short"?` — 🔔 SINAL!`:""));
+    if(s.action==="long"||s.action==="short"){ try{new Audio("data:audio/wav;base64,UklGRl9vT19XQVZF").play()}catch(e){} } };
+  tick(); watch=setInterval(tick, 20000);
+}
+
+async function carregarCarteira(){
+  $("panelCarteira").classList.remove("hide");
+  $("carteiraBody").innerHTML=`<tr><td colspan="3"><span class="spinner"></span> Analisando 7 ações… (alguns minutos)</td></tr>`;
+  setStatus("Analisando a carteira inteira… pode levar alguns minutos.");
+  try{
+    const d=await (await fetch(`/api/carteira?capital=${$("capital").value}`)).json();
+    $("carteiraBody").innerHTML=d.carteira.map(a=>
+      `<tr><td>${a.symbol}</td><td><span class="pill ${a.decision}">${a.decision}</span></td><td>${a.active}</td></tr>`).join("");
+    setStatus("✅ Carteira atualizada.");
+  }catch(e){ setStatus("❌ "+e); }
+}
+
+// eventos
+$("tfs").addEventListener("click",e=>{ if(!e.target.dataset.tf)return;
+  document.querySelectorAll(".tf").forEach(b=>b.classList.remove("active"));
+  e.target.classList.add("active"); TF=e.target.dataset.tf; loadCandles(); });
+$("btnAnalisar").onclick=analisar;
+$("btnVigiar").onclick=toggleWatch;
+$("btnCarteira").onclick=carregarCarteira;
+$("symbol").onchange=()=>{ $("symbolCustom").value=""; loadCandles(); };
+
+initChart();
+loadCandles();
+</script>
+</body>
+</html>
