@@ -106,7 +106,8 @@ def candles():
     except Exception as exc:
         return jsonify({"error": str(exc)[:120]}), 400
     data = [
-        {"time": int(c.ts), "open": c.open, "high": c.high, "low": c.low, "close": c.close}
+        {"time": int(c.ts), "open": c.open, "high": c.high, "low": c.low,
+         "close": c.close, "volume": c.volume}
         for c in cs[-400:]
     ]
     return jsonify({"candles": data, "symbol": symbol, "tf": tf})

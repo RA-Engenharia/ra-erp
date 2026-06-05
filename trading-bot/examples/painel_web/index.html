@@ -3,139 +3,182 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>RA Robô — Painel</title>
+<title>RA Robô — Terminal</title>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
   :root{
-    --bg:#0b0e14; --panel:#141925; --panel2:#1b2233; --line:#243049;
+    --bg:#0b0e14; --panel:#161b27; --panel2:#1d2434; --line:#2a3550;
     --txt:#e6edf3; --muted:#8b97a8; --green:#16c784; --red:#ea3943;
-    --blue:#3b82f6; --amber:#f5a623;
+    --blue:#3b82f6; --amber:#f5a623; --head:#10141f;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--txt);
-    font-family:Inter,Segoe UI,system-ui,Arial,sans-serif;font-size:14px}
-  header{display:flex;align-items:center;gap:14px;padding:12px 18px;
-    background:#10141f;border-bottom:1px solid var(--line);flex-wrap:wrap}
-  .logo{font-weight:800;font-size:18px;letter-spacing:.5px}
-  .logo span{color:var(--green)}
-  .ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--txt);overflow:hidden;
+    font-family:Inter,Segoe UI,system-ui,Arial,sans-serif;font-size:13px}
+
+  /* ---------- toolbar ---------- */
+  header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--head);
+    border-bottom:1px solid var(--line);flex-wrap:wrap;z-index:50;position:relative}
+  .logo{font-weight:800;font-size:17px;letter-spacing:.5px}.logo span{color:var(--green)}
   select,input,button{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
-    border-radius:8px;padding:8px 10px;font-size:13px;outline:none}
-  input{width:110px}
-  button{cursor:pointer;font-weight:600;transition:.15s}
+    border-radius:7px;padding:7px 9px;font-size:12px;outline:none}
+  input{width:96px} button{cursor:pointer;font-weight:600;transition:.12s}
   button:hover{border-color:#3b4d72}
-  .tf{padding:8px 12px}
-  .tf.active{background:var(--blue);border-color:var(--blue)}
+  .tf{padding:7px 11px}.tf.active{background:var(--blue);border-color:var(--blue)}
   .btn-primary{background:var(--green);border-color:var(--green);color:#04130c}
-  .btn-primary:hover{filter:brightness(1.08)}
   .btn-watch.on{background:var(--amber);border-color:var(--amber);color:#1a1200}
-  main{display:grid;grid-template-columns:1fr 360px;gap:14px;padding:14px}
-  @media(max-width:900px){main{grid-template-columns:1fr}}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
-  #chart{height:62vh;min-height:380px}
-  .sig-badge{font-size:26px;font-weight:800;text-align:center;padding:14px;border-radius:12px;margin-bottom:12px}
+  .sep{width:1px;height:24px;background:var(--line);margin:0 2px}
+  .wbtn.active{background:#26314b;border-color:var(--blue)}
+
+  /* ---------- desktop / chart ---------- */
+  #desktop{position:absolute;top:var(--htop,54px);left:0;right:0;bottom:22px}
+  #chartWrap{position:absolute;inset:0}
+  #chart{position:absolute;inset:0}
+  .legend{position:absolute;top:10px;left:12px;z-index:5;background:rgba(16,20,31,.82);
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.7;pointer-events:none}
+  .legend b{font-size:13px}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:0}
+  #tip{position:absolute;z-index:6;background:rgba(16,20,31,.95);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;font-size:12px;pointer-events:none;display:none;min-width:140px}
+  #tip .r{display:flex;justify-content:space-between;gap:14px}
+
+  /* ---------- janelas arrastaveis ---------- */
+  .window{position:absolute;width:340px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);z-index:10;display:flex;flex-direction:column;
+    max-height:82vh}
+  .window.hide{display:none}
+  .win-head{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;
+    background:var(--head);border-bottom:1px solid var(--line);border-radius:12px 12px 0 0;cursor:grab;user-select:none}
+  .win-head:active{cursor:grabbing}
+  .win-title{font-weight:700;font-size:13px}
+  .win-head .x{cursor:pointer;color:var(--muted);font-weight:700;padding:0 4px}
+  .win-head .x:hover{color:var(--red)}
+  .win-body{padding:12px;overflow:auto}
+
+  h3{margin:14px 0 7px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  h3:first-child{margin-top:0}
+  .rows{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .kv{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px}
+  .kv .k{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+  .kv .v{font-size:16px;font-weight:700;margin-top:2px}
+  .v.stop{color:var(--red)}.v.take{color:var(--green)}.v.entry{color:var(--blue)}
+  .sig-badge{font-size:22px;font-weight:800;text-align:center;padding:12px;border-radius:11px;margin-bottom:10px}
   .sig-long{background:rgba(22,199,132,.15);color:var(--green);border:1px solid var(--green)}
   .sig-short{background:rgba(234,57,67,.15);color:var(--red);border:1px solid var(--red)}
   .sig-wait{background:rgba(139,151,168,.12);color:var(--muted);border:1px solid var(--line)}
-  .rows{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .kv{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px}
-  .kv .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
-  .kv .v{font-size:17px;font-weight:700;margin-top:3px}
-  .v.stop{color:var(--red)} .v.take{color:var(--green)} .v.entry{color:var(--blue)}
-  h3{margin:18px 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
-  .comm{display:flex;justify-content:space-between;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px}
-  .comm .robust{color:var(--green);font-weight:700}
-  .comm .no{color:var(--muted)}
-  .status{font-size:12px;color:var(--muted);padding:6px 18px;border-top:1px solid var(--line)}
-  .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--line);
+  .comm{display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid var(--line);font-size:12px}
+  .comm .robust{color:var(--green);font-weight:700}.comm .no{color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  td,th{padding:6px 7px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--muted);font-weight:600}
+  tr[data-sym]{cursor:pointer} tr[data-sym]:hover{background:var(--panel2)}
+  .pill{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
+  .pill.COMPRAR,.pill.alta{background:rgba(22,199,132,.18);color:var(--green)}
+  .pill.VENDER,.pill.baixa{background:rgba(234,57,67,.18);color:var(--red)}
+  .pill.AGUARDAR{background:rgba(139,151,168,.15);color:var(--muted)}
+  .btn-primary.full{width:100%;margin-top:10px}
+  .spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--line);
     border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .disc{font-size:11px;color:var(--muted);padding:10px 16px;line-height:1.5}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  td,th{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left}
-  .pill{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}
-  .pill.COMPRAR{background:rgba(22,199,132,.18);color:var(--green)}
-  .pill.VENDER{background:rgba(234,57,67,.18);color:var(--red)}
-  .pill.AGUARDAR{background:rgba(139,151,168,.15);color:var(--muted)}
   .hide{display:none}
+  footer{position:absolute;bottom:0;left:0;right:0;height:22px;background:var(--head);
+    border-top:1px solid var(--line);font-size:11px;color:var(--muted);display:flex;align-items:center;padding:0 14px;z-index:40}
 </style>
 </head>
 <body>
-<header>
+<header id="toolbar">
   <div class="logo">RA <span>Robô</span></div>
-  <div class="ctrl">
-    <select id="symbol">
-      <option>PETR4.SA</option><option>VALE3.SA</option><option>ITUB4.SA</option>
-      <option>BBDC4.SA</option><option>BBAS3.SA</option><option>WEGE3.SA</option>
-      <option>ABEV3.SA</option><option>B3SA3.SA</option><option>BTC-USD</option><option>ETH-USD</option>
-    </select>
-    <input id="symbolCustom" placeholder="ou digite o código" />
-  </div>
-  <div class="ctrl" id="tfs">
+  <select id="symbol">
+    <option>PETR4.SA</option><option>VALE3.SA</option><option>ITUB4.SA</option>
+    <option>BBDC4.SA</option><option>BBAS3.SA</option><option>WEGE3.SA</option>
+    <option>ABEV3.SA</option><option>B3SA3.SA</option><option>BTC-USD</option><option>ETH-USD</option>
+  </select>
+  <input id="symbolCustom" placeholder="código…" />
+  <div id="tfs" style="display:flex;gap:6px">
     <button class="tf" data-tf="5m">5m</button>
     <button class="tf active" data-tf="15m">15m</button>
     <button class="tf" data-tf="1h">1h</button>
     <button class="tf" data-tf="1d">1d</button>
   </div>
-  <div class="ctrl">
-    <input id="capital" type="number" value="5000" title="Capital (R$)" />
-    <button class="btn-primary" id="btnAnalisar">⚡ Analisar</button>
-    <button class="btn-watch" id="btnVigiar">👁 Vigiar</button>
-    <button id="btnRadar">🔭 Radar</button>
-    <button id="btnCarteira">📊 Carteira</button>
-    <button id="btnExtrato">📒 Extrato</button>
-  </div>
+  <input id="capital" type="number" value="5000" title="Capital (R$)" />
+  <button class="btn-primary" id="btnAnalisar">⚡ Analisar</button>
+  <button class="btn-watch" id="btnVigiar">👁 Vigiar</button>
+  <div class="sep"></div>
+  <!-- toggles de janela -->
+  <button class="wbtn" data-win="win-sinal">🎯 Sinal</button>
+  <button class="wbtn" data-win="win-trades">📌 Operações</button>
+  <button class="wbtn" data-win="win-analise">🔬 Análise</button>
+  <button class="wbtn" data-win="win-perf">📈 Desempenho</button>
+  <button class="wbtn" data-win="win-radar">🔭 Radar</button>
+  <button class="wbtn" data-win="win-carteira">📊 Carteira</button>
+  <button class="wbtn" data-win="win-extrato">📒 Extrato</button>
+  <button id="btnReset" title="Reorganizar janelas">↺</button>
 </header>
 
-<main>
-  <div class="card">
+<div id="desktop">
+  <div id="chartWrap">
     <div id="chart"></div>
+    <div class="legend" id="legend">
+      <b id="legSym">—</b> <span id="legOHLC" style="color:var(--muted)"></span><br/>
+      <span class="dot" style="background:var(--green)"></span>alta
+      <span class="dot" style="background:var(--red);margin-left:8px"></span>baixa
+      <span class="dot" style="background:var(--amber);margin-left:8px"></span>EMA9
+      <span class="dot" style="background:var(--blue);margin-left:8px"></span>EMA21<br/>
+      <span class="dot" style="background:var(--blue)"></span>entrada
+      <span class="dot" style="background:var(--red);margin-left:8px"></span>STOP
+      <span class="dot" style="background:var(--green);margin-left:8px"></span>alvo
+    </div>
+    <div id="tip"></div>
   </div>
 
-  <div>
-    <div class="card" id="panelSignal">
+  <!-- JANELA: SINAL -->
+  <div class="window" id="win-sinal" style="left:auto;right:14px;top:14px">
+    <div class="win-head"><span class="win-title">🎯 Sinal</span><span class="x" data-close="win-sinal">✕</span></div>
+    <div class="win-body">
       <div class="sig-badge sig-wait" id="badge">AGUARDANDO</div>
       <div class="rows">
         <div class="kv"><div class="k">Entrada</div><div class="v entry" id="vEntry">—</div></div>
         <div class="kv"><div class="k">Ganho / Risco</div><div class="v" id="vRR">—</div></div>
-        <div class="kv"><div class="k">Stop (proteção)</div><div class="v stop" id="vStop">—</div></div>
+        <div class="kv"><div class="k">Stop</div><div class="v stop" id="vStop">—</div></div>
         <div class="kv"><div class="k">Alvo</div><div class="v take" id="vTake">—</div></div>
         <div class="kv"><div class="k">Quantidade</div><div class="v" id="vQty">—</div></div>
         <div class="kv"><div class="k">Você arrisca</div><div class="v" id="vRisk">—</div></div>
       </div>
-      <button id="btnTrack" class="btn-primary hide" style="width:100%;margin-top:12px">➕ Acompanhar esta operação</button>
-      <h3>Comitê do cérebro</h3>
-      <div id="committee"><div class="comm"><span class="no">Clique em “Analisar”.</span></div></div>
+      <button id="btnTrack" class="btn-primary full hide">➕ Acompanhar esta operação</button>
     </div>
+  </div>
 
-    <div class="card hide" id="panelTrades" style="margin-top:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h3 style="margin:0">Minhas operações (ao vivo)</h3>
-        <span id="tradesTotal" style="font-weight:700">—</span>
-      </div>
-      <div id="tradesBody" style="margin-top:8px"></div>
-    </div>
+  <!-- JANELA: OPERAÇÕES -->
+  <div class="window hide" id="win-trades" style="left:auto;right:14px;top:360px">
+    <div class="win-head"><span class="win-title">📌 Operações <span id="tradesTotal" style="margin-left:8px"></span></span><span class="x" data-close="win-trades">✕</span></div>
+    <div class="win-body"><div id="tradesBody"><span class="no" style="color:var(--muted)">Nenhuma operação. Entre por um sinal (➕ Acompanhar).</span></div></div>
+  </div>
 
-    <div class="card" id="panelTec" style="margin-top:14px">
-      <h3 style="margin-top:0">Leitura técnica (ao vivo)</h3>
-      <div class="rows" id="tecRows">
+  <!-- JANELA: ANÁLISE -->
+  <div class="window" id="win-analise" style="left:14px;top:14px">
+    <div class="win-head"><span class="win-title">🔬 Análise técnica</span><span class="x" data-close="win-analise">✕</span></div>
+    <div class="win-body">
+      <h3>Leitura ao vivo</h3>
+      <div class="rows">
         <div class="kv"><div class="k">RSI (14)</div><div class="v" id="iRsi">—</div></div>
         <div class="kv"><div class="k">Volatilidade (ATR)</div><div class="v" id="iAtr">—</div></div>
         <div class="kv"><div class="k">Força tendência</div><div class="v" id="iEr">—</div></div>
         <div class="kv"><div class="k">Variação</div><div class="v" id="iChg">—</div></div>
       </div>
-      <h3>Tendência por tempo (alinhamento)</h3>
-      <div id="mtf" style="display:flex;gap:8px;flex-wrap:wrap">
-        <span class="no" style="color:#8b97a8">—</span>
-      </div>
+      <h3>Tendência por tempo</h3>
+      <div id="mtf" style="display:flex;gap:6px;flex-wrap:wrap"><span style="color:var(--muted)">—</span></div>
+      <h3>Comitê do cérebro</h3>
+      <div id="committee"><div class="comm"><span class="no">Clique em “Analisar”.</span></div></div>
     </div>
+  </div>
 
-    <div class="card" id="panelPerf" style="margin-top:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <h3 style="margin:0">Desempenho (backtest)</h3>
-        <button id="btnPerf" style="padding:6px 10px">Calcular</button>
-      </div>
-      <div class="rows" id="perfRows" style="margin-top:10px">
+  <!-- JANELA: DESEMPENHO -->
+  <div class="window hide" id="win-perf" style="left:14px;top:430px;width:380px">
+    <div class="win-head"><span class="win-title">📈 Desempenho (backtest)</span>
+      <span><button id="btnPerf" style="padding:3px 8px;font-size:11px">Calcular</button>
+      <span class="x" data-close="win-perf" style="margin-left:6px">✕</span></span></div>
+    <div class="win-body">
+      <div class="rows">
         <div class="kv"><div class="k">Retorno</div><div class="v" id="pRet">—</div></div>
         <div class="kv"><div class="k">Acerto</div><div class="v" id="pWin">—</div></div>
         <div class="kv"><div class="k">Fator de lucro</div><div class="v" id="pPf">—</div></div>
@@ -143,154 +186,182 @@
         <div class="kv"><div class="k">Trades</div><div class="v" id="pN">—</div></div>
         <div class="kv"><div class="k">Expectância</div><div class="v" id="pExp">—</div></div>
       </div>
-      <div id="eqchart" style="height:160px;margin-top:10px"></div>
+      <div id="eqchart" style="height:150px;margin-top:10px"></div>
     </div>
+  </div>
 
-    <div class="card hide" id="panelRadar" style="margin-top:14px">
-      <h3 style="margin-top:0">🔭 Radar de oportunidades (pré-seleção técnica)</h3>
+  <!-- JANELA: RADAR -->
+  <div class="window hide" id="win-radar" style="left:380px;top:60px;width:420px">
+    <div class="win-head"><span class="win-title">🔭 Radar de oportunidades</span><span class="x" data-close="win-radar">✕</span></div>
+    <div class="win-body">
       <table><thead><tr><th>Ativo</th><th>Preço</th><th>Var%</th><th>Tend.</th><th>RSI</th><th>Setup</th></tr></thead>
-      <tbody id="radarBody"></tbody></table>
-      <div style="font-size:11px;color:#8b97a8;margin-top:8px">Clique numa linha para analisar a fundo. “Setup” = cruzamento a favor da tendência (gatilho rápido), não garantia.</div>
+      <tbody id="radarBody"><tr><td colspan="6" style="color:var(--muted)">Clique no botão Radar para varrer o mercado.</td></tr></tbody></table>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">Clique numa linha para analisar a fundo. “Setup” = gatilho rápido, não garantia.</div>
     </div>
+  </div>
 
-    <div class="card hide" id="panelCarteira" style="margin-top:14px">
-      <h3 style="margin-top:0">Carteira (swing diário)</h3>
-      <table><thead><tr><th>Ação</th><th>Hoje</th><th>Comitê</th></tr></thead>
-      <tbody id="carteiraBody"></tbody></table>
-    </div>
+  <!-- JANELA: CARTEIRA -->
+  <div class="window hide" id="win-carteira" style="left:420px;top:120px">
+    <div class="win-head"><span class="win-title">📊 Carteira (swing)</span><span class="x" data-close="win-carteira">✕</span></div>
+    <div class="win-body"><table><thead><tr><th>Ação</th><th>Hoje</th><th>Comitê</th></tr></thead>
+      <tbody id="carteiraBody"><tr><td colspan="3" style="color:var(--muted)">Clique no botão Carteira.</td></tr></tbody></table></div>
+  </div>
 
-    <div class="card hide" id="panelExtrato" style="margin-top:14px">
-      <h3 style="margin-top:0">Extrato de sinais — placar real</h3>
-      <div class="rows" style="margin-bottom:10px">
-        <div class="kv"><div class="k">Acertos (alvo)</div><div class="v take" id="exAcertos">—</div></div>
-        <div class="kv"><div class="k">Erros (stop)</div><div class="v stop" id="exErros">—</div></div>
-        <div class="kv"><div class="k">Taxa de acerto</div><div class="v" id="exTaxa">—</div></div>
+  <!-- JANELA: EXTRATO -->
+  <div class="window hide" id="win-extrato" style="left:60px;top:80px;width:460px">
+    <div class="win-head"><span class="win-title">📒 Extrato — placar real</span><span class="x" data-close="win-extrato">✕</span></div>
+    <div class="win-body">
+      <div class="rows" style="margin-bottom:8px">
+        <div class="kv"><div class="k">Acertos</div><div class="v take" id="exAcertos">—</div></div>
+        <div class="kv"><div class="k">Erros</div><div class="v stop" id="exErros">—</div></div>
+        <div class="kv"><div class="k">Taxa</div><div class="v" id="exTaxa">—</div></div>
         <div class="kv"><div class="k">Em aberto</div><div class="v" id="exAbertos">—</div></div>
       </div>
-      <div class="kv" style="margin-bottom:10px">
-        <div class="k">Resultado simulado (seguindo TODOS os sinais, já com custos)</div>
-        <div class="v" id="exPnl" style="font-size:22px">—</div>
-      </div>
-      <table><thead><tr><th>Data</th><th>Ativo</th><th>Sinal</th><th>Entrada</th><th>Resultado</th><th>R$</th></tr></thead>
+      <div class="kv" style="margin-bottom:8px"><div class="k">Resultado simulado (já com custos)</div><div class="v" id="exPnl" style="font-size:20px">—</div></div>
+      <table><thead><tr><th>Data</th><th>Ativo</th><th>Sinal</th><th>Entr.</th><th>Result.</th><th>R$</th></tr></thead>
       <tbody id="extratoBody"></tbody></table>
     </div>
   </div>
-</main>
+</div>
 
-<div class="status" id="status">Pronto. Escolha o ativo e clique em <b>Analisar</b>.</div>
-<div class="disc">⚠️ Isto NÃO envia ordem — só mostra sinais. Você executa na sua corretora, sempre com o STOP.
-  Day trade intraday foi onde os testes não acharam vantagem; comece no papel, com dinheiro que pode perder.</div>
+<footer id="status">Pronto. Escolha o ativo e clique em Analisar. Dica: arraste as janelas pela barra do título.</footer>
 
 <script>
 const $ = id => document.getElementById(id);
-let TF = "15m", watch = null, series = null, chart = null, priceLines = [];
+let TF="15m", watch=null, series=null, chart=null, volSeries=null, priceLines=[];
 let ema9series=null, ema21series=null, eqChart=null, eqSeries=null;
-let lastSignal=null, notifiedTrades={};
+let lastSignal=null, notifiedTrades={}, lastCandles=[];
+const HEAD_H = ()=> $("toolbar").offsetHeight;
 
 function curSymbol(){ return ($("symbolCustom").value.trim() || $("symbol").value).toUpperCase(); }
 function setStatus(html){ $("status").innerHTML = html; }
-
-function initChart(){
-  chart = LightweightCharts.createChart($("chart"), {
-    layout:{ background:{color:"#141925"}, textColor:"#8b97a8" },
-    grid:{ vertLines:{color:"#1b2233"}, horzLines:{color:"#1b2233"} },
-    timeScale:{ timeVisible:true, secondsVisible:false, borderColor:"#243049" },
-    rightPriceScale:{ borderColor:"#243049" },
-    crosshair:{ mode:0 },
-  });
-  series = chart.addCandlestickSeries({
-    upColor:"#16c784", downColor:"#ea3943", borderVisible:false,
-    wickUpColor:"#16c784", wickDownColor:"#ea3943"
-  });
-  ema9series = chart.addLineSeries({color:"#f5a623", lineWidth:1, priceLineVisible:false, lastValueVisible:false});
-  ema21series = chart.addLineSeries({color:"#3b82f6", lineWidth:1, priceLineVisible:false, lastValueVisible:false});
-  new ResizeObserver(()=>chart.applyOptions({width:$("chart").clientWidth, height:$("chart").clientHeight}))
-    .observe($("chart"));
-}
-
-function emaCalc(values, period){
-  const k=2/(period+1); const out=[]; let prev=null;
-  for(let i=0;i<values.length;i++){
-    if(i<period-1){ out.push(null); continue; }
-    if(prev===null){ let s=0; for(let j=i-period+1;j<=i;j++)s+=values[j]; prev=s/period; }
-    else prev=values[i]*k+prev*(1-k);
-    out.push(prev);
-  }
-  return out;
-}
-function updateEMAs(candles){
-  const closes=candles.map(c=>c.close);
-  const e9=emaCalc(closes,9), e21=emaCalc(closes,21);
-  ema9series.setData(candles.map((c,i)=>e9[i]!=null?{time:c.time,value:e9[i]}:null).filter(Boolean));
-  ema21series.setData(candles.map((c,i)=>e21[i]!=null?{time:c.time,value:e21[i]}:null).filter(Boolean));
-}
-
-async function loadCandles(){
-  const r = await fetch(`/api/candles?symbol=${curSymbol()}&tf=${TF}`);
-  const d = await r.json();
-  if(d.error){ setStatus("❌ "+d.error); return; }
-  series.setData(d.candles);
-  updateEMAs(d.candles);
-  chart.timeScale().fitContent();
-}
-
-function clearLines(){ priceLines.forEach(l=>series.removePriceLine(l)); priceLines=[]; }
-function addLine(price,color,title){
-  priceLines.push(series.createPriceLine({price, color, lineWidth:2, lineStyle:2, axisLabelVisible:true, title}));
-}
-
 function money(v){ return "R$ "+Number(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function pct(v){ return (v*100).toFixed(1)+"%"; }
 
+/* ---------------- janelas arrastaveis ---------------- */
+function makeDraggable(win){
+  const head=win.querySelector(".win-head");
+  head.addEventListener("mousedown",e=>{
+    if(e.target.classList.contains("x")||e.target.tagName==="BUTTON") return;
+    bringFront(win);
+    const r=win.getBoundingClientRect(), dx=e.clientX-r.left, dy=e.clientY-r.top;
+    const move=ev=>{ win.style.left=(ev.clientX-dx)+"px"; win.style.right="auto"; win.style.top=Math.max(HEAD_H(),ev.clientY-dy)+"px"; };
+    const up=()=>{ document.removeEventListener("mousemove",move); document.removeEventListener("mouseup",up); savePos(); };
+    document.addEventListener("mousemove",move); document.addEventListener("mouseup",up);
+  });
+  win.addEventListener("mousedown",()=>bringFront(win));
+}
+let zTop=10;
+function bringFront(win){ win.style.zIndex=++zTop; }
+function savePos(){
+  const s={};
+  document.querySelectorAll(".window").forEach(w=>{ s[w.id]={left:w.style.left,top:w.style.top,right:w.style.right,hidden:w.classList.contains("hide")}; });
+  try{ localStorage.setItem("ra_wins",JSON.stringify(s)); }catch(e){}
+}
+function restorePos(){
+  try{
+    const s=JSON.parse(localStorage.getItem("ra_wins")||"{}");
+    Object.entries(s).forEach(([id,p])=>{ const w=$(id); if(!w)return;
+      if(p.left)w.style.left=p.left; if(p.top)w.style.top=p.top; if(p.right)w.style.right=p.right;
+      w.classList.toggle("hide",!!p.hidden); });
+  }catch(e){}
+  syncToggles();
+}
+function toggleWin(id,forceOpen){
+  const w=$(id); const willShow = forceOpen || w.classList.contains("hide");
+  w.classList.toggle("hide",!willShow);
+  if(willShow) bringFront(w);
+  syncToggles(); savePos(); return willShow;
+}
+function syncToggles(){
+  document.querySelectorAll(".wbtn").forEach(b=>{
+    const w=$(b.dataset.win); b.classList.toggle("active", w && !w.classList.contains("hide"));
+  });
+}
+
+/* ---------------- grafico ---------------- */
+function initChart(){
+  chart = LightweightCharts.createChart($("chart"),{
+    layout:{background:{color:"#0e1320"},textColor:"#8b97a8"},
+    grid:{vertLines:{color:"#161b27"},horzLines:{color:"#161b27"}},
+    timeScale:{timeVisible:true,secondsVisible:false,borderColor:"#2a3550"},
+    rightPriceScale:{borderColor:"#2a3550"}, crosshair:{mode:0},
+  });
+  series=chart.addCandlestickSeries({upColor:"#16c784",downColor:"#ea3943",borderVisible:false,wickUpColor:"#16c784",wickDownColor:"#ea3943"});
+  ema9series=chart.addLineSeries({color:"#f5a623",lineWidth:1,priceLineVisible:false,lastValueVisible:false});
+  ema21series=chart.addLineSeries({color:"#3b82f6",lineWidth:1,priceLineVisible:false,lastValueVisible:false});
+  volSeries=chart.addHistogramSeries({priceFormat:{type:"volume"},priceScaleId:"vol"});
+  chart.priceScale("vol").applyOptions({scaleMargins:{top:0.85,bottom:0}});
+  new ResizeObserver(()=>chart.applyOptions({width:$("chart").clientWidth,height:$("chart").clientHeight})).observe($("chart"));
+  chart.subscribeCrosshairMove(p=>{
+    const tip=$("tip");
+    if(!p.time||!p.point||p.point.x<0){ tip.style.display="none"; return; }
+    const d=p.seriesData.get(series); if(!d){ tip.style.display="none"; return; }
+    const up=d.close>=d.open, col=up?"#16c784":"#ea3943";
+    tip.innerHTML=`<div class="r"><span>Abert.</span><b>${d.open.toFixed(2)}</b></div>
+      <div class="r"><span>Máx.</span><b>${d.high.toFixed(2)}</b></div>
+      <div class="r"><span>Mín.</span><b>${d.low.toFixed(2)}</b></div>
+      <div class="r"><span>Fech.</span><b style="color:${col}">${d.close.toFixed(2)}</b></div>`;
+    tip.style.display="block";
+    const wrap=$("chartWrap").getBoundingClientRect();
+    let x=p.point.x+18, y=p.point.y+18;
+    if(x>wrap.width-160)x=p.point.x-160; if(y>wrap.height-110)y=p.point.y-110;
+    tip.style.left=x+"px"; tip.style.top=y+"px";
+  });
+}
+function emaCalc(values,period){const k=2/(period+1);const out=[];let prev=null;
+  for(let i=0;i<values.length;i++){ if(i<period-1){out.push(null);continue;}
+    if(prev===null){let s=0;for(let j=i-period+1;j<=i;j++)s+=values[j];prev=s/period;}else prev=values[i]*k+prev*(1-k);
+    out.push(prev);} return out;}
+function updateEMAs(c){const cl=c.map(x=>x.close),e9=emaCalc(cl,9),e21=emaCalc(cl,21);
+  ema9series.setData(c.map((x,i)=>e9[i]!=null?{time:x.time,value:e9[i]}:null).filter(Boolean));
+  ema21series.setData(c.map((x,i)=>e21[i]!=null?{time:x.time,value:e21[i]}:null).filter(Boolean));}
+async function loadCandles(){
+  const r=await fetch(`/api/candles?symbol=${curSymbol()}&tf=${TF}`); const d=await r.json();
+  if(d.error){ setStatus("❌ "+d.error); return; }
+  lastCandles=d.candles; series.setData(d.candles); updateEMAs(d.candles);
+  volSeries.setData(d.candles.map(x=>({time:x.time,value:x.volume||0,color:x.close>=x.open?"rgba(22,199,132,.4)":"rgba(234,57,67,.4)"})));
+  chart.timeScale().fitContent();
+  const last=d.candles[d.candles.length-1];
+  $("legSym").textContent=curSymbol()+" · "+TF;
+  if(last) $("legOHLC").textContent=`O ${last.open.toFixed(2)} · H ${last.high.toFixed(2)} · L ${last.low.toFixed(2)} · C ${last.close.toFixed(2)}`;
+}
+function clearLines(){priceLines.forEach(l=>series.removePriceLine(l));priceLines=[];}
+function addLine(price,color,title){priceLines.push(series.createPriceLine({price,color,lineWidth:2,lineStyle:2,axisLabelVisible:true,title}));}
+
+/* ---------------- sinal ---------------- */
 function renderCard(s){
-  clearLines();
-  const badge=$("badge");
+  clearLines(); const badge=$("badge");
   if(s.action==="long"||s.action==="short"){
     const long=s.action==="long";
     badge.className="sig-badge "+(long?"sig-long":"sig-short");
-    badge.textContent=(long?"▲ COMPRAR":"▼ VENDER")+"  ("+s.reason+")";
-    $("vEntry").textContent=money(s.entry);
-    $("vStop").textContent=money(s.stop)+"  ("+pct(s.risk_pct)+")";
-    $("vTake").textContent=money(s.take)+"  (+"+pct(s.reward_pct)+")";
-    $("vRR").textContent=s.rr.toFixed(1)+" : 1";
-    $("vQty").textContent=s.qty+" ações";
-    $("vRisk").textContent=money(s.risk_reais);
+    badge.textContent=(long?"▲ COMPRAR":"▼ VENDER")+" ("+s.reason+")";
+    $("vEntry").textContent=money(s.entry); $("vStop").textContent=money(s.stop)+" ("+pct(s.risk_pct)+")";
+    $("vTake").textContent=money(s.take)+" (+"+pct(s.reward_pct)+")"; $("vRR").textContent=s.rr.toFixed(1)+" : 1";
+    $("vQty").textContent=s.qty+" ações"; $("vRisk").textContent=money(s.risk_reais);
     addLine(s.entry,"#3b82f6","entrada"); addLine(s.stop,"#ea3943","STOP"); addLine(s.take,"#16c784","alvo");
-    lastSignal={...s, symbol:curSymbol(), tf:TF}; $("btnTrack").classList.remove("hide");
-  } else if(s.action==="wait"){
+    lastSignal={...s,symbol:curSymbol(),tf:TF}; $("btnTrack").classList.remove("hide");
+  }else if(s.action==="wait"){
     badge.className="sig-badge sig-wait"; badge.textContent="AGUARDAR (sem sinal agora)";
-    ["vEntry","vStop","vTake","vRR","vQty","vRisk"].forEach(i=>$(i).textContent="—");
-    $("btnTrack").classList.add("hide");
-  } else if(s.action==="uncalibrated"){
-    badge.className="sig-badge sig-wait"; badge.textContent="Clique em Analisar primeiro";
-  } else if(s.error){ setStatus("❌ "+s.error); }
+    ["vEntry","vStop","vTake","vRR","vQty","vRisk"].forEach(i=>$(i).textContent="—"); $("btnTrack").classList.add("hide");
+  }else if(s.action==="uncalibrated"){ badge.className="sig-badge sig-wait"; badge.textContent="Clique em Analisar"; }
+  else if(s.error){ setStatus("❌ "+s.error); }
 }
-
-function renderCommittee(c){
-  $("committee").innerHTML = c.map(m=>
-    `<div class="comm"><span>${m.name} <small style="color:#8b97a8">(${m.folds}, R$ ${m.exp})</small></span>
-     <span class="${m.robust?'robust':'no'}">${m.robust?'✓ '+m.weight:'—'}</span></div>`).join("");
-}
-
+function renderCommittee(c){ $("committee").innerHTML=c.map(m=>
+  `<div class="comm"><span>${m.name} <small style="color:#8b97a8">(${m.folds}, R$ ${m.exp})</small></span>
+   <span class="${m.robust?'robust':'no'}">${m.robust?'✓ '+m.weight:'—'}</span></div>`).join(""); }
 async function analisar(){
-  await loadCandles();
-  loadIndicators(); loadMTF();
-  setStatus(`<span class="spinner"></span> Calibrando o cérebro para ${curSymbol()} ${TF}… (1-2 min, só na 1ª vez)`);
+  toggleWin("win-sinal",true); toggleWin("win-analise",true);
+  await loadCandles(); loadIndicators(); loadMTF();
+  setStatus(`<span class="spinner"></span> Calibrando o cérebro para ${curSymbol()} ${TF}… (1-2 min na 1ª vez)`);
   try{
-    const cr = await (await fetch(`/api/calibrate?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json();
+    const cr=await (await fetch(`/api/calibrate?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json();
     if(cr.error){ setStatus("❌ "+cr.error); return; }
-    renderCommittee(cr.committee);
-    if(cr.active===0){ setStatus("Nenhuma estratégia robusta neste ativo — o cérebro fica de fora."); }
-    await atualizarSinal();
-    setStatus(`✅ Pronto. Comitê com ${cr.active} estratégia(s). Use “Vigiar” p/ atualizar sozinho.`);
+    renderCommittee(cr.committee); await atualizarSinal();
+    setStatus(cr.active===0?"Nenhuma estratégia robusta — o cérebro fica de fora.":`✅ Pronto. Comitê com ${cr.active} estratégia(s).`);
   }catch(e){ setStatus("❌ "+e); }
 }
-
-async function atualizarSinal(){
-  const s = await (await fetch(`/api/signal?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json();
-  renderCard(s);
-  return s;
-}
+async function atualizarSinal(){ const s=await (await fetch(`/api/signal?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json(); renderCard(s); return s; }
 
 function toggleWatch(){
   const b=$("btnVigiar");
@@ -299,203 +370,112 @@ function toggleWatch(){
   if(window.Notification && Notification.permission==="default") Notification.requestPermission();
   let lastTs=0;
   const tick=async()=>{ await loadCandles(); loadIndicators(); const s=await atualizarSinal();
-    const t=new Date().toLocaleTimeString("pt-BR");
-    const hasSig=(s.action==="long"||s.action==="short");
-    setStatus(`● Vigiando ${curSymbol()} ${TF} — última checagem ${t}` + (hasSig?` — 🔔 SINAL!`:""));
-    if(hasSig && s.ts!==lastTs){
-      lastTs=s.ts;
-      try{new Audio("data:audio/wav;base64,UklGRl9vT19XQVZF").play()}catch(e){}
-      notify(`Sinal em ${curSymbol()}`, (s.action==="long"?"COMPRAR":"VENDER")+` @ ${money(s.entry)} | stop ${money(s.stop)} | alvo ${money(s.take)}`);
-    }
+    const t=new Date().toLocaleTimeString("pt-BR"), hasSig=(s.action==="long"||s.action==="short");
+    setStatus(`● Vigiando ${curSymbol()} ${TF} — ${t}`+(hasSig?` — 🔔 SINAL!`:""));
+    if(hasSig&&s.ts!==lastTs){ lastTs=s.ts; beep(); notify(`Sinal em ${curSymbol()}`,(s.action==="long"?"COMPRAR":"VENDER")+` @ ${money(s.entry)} | stop ${money(s.stop)} | alvo ${money(s.take)}`); }
     loadTrades(); };
-  tick(); watch=setInterval(tick, 20000);
+  tick(); watch=setInterval(tick,20000);
 }
+function beep(){ try{new Audio("data:audio/wav;base64,UklGRl9vT19XQVZF").play()}catch(e){} }
+function notify(t,b){ try{ if(window.Notification&&Notification.permission==="granted") new Notification(t,{body:b}); }catch(e){} }
 
-async function loadIndicators(){
-  try{
-    const d = await (await fetch(`/api/indicators?symbol=${curSymbol()}&tf=${TF}`)).json();
-    if(d.error) return;
-    const rsi=d.rsi;
-    $("iRsi").textContent = rsi!=null ? rsi.toFixed(0)+(rsi>70?" (sobrecompr.)":rsi<30?" (sobrevend.)":"") : "—";
-    $("iRsi").style.color = rsi>70?"#ea3943":rsi<30?"#16c784":"#e6edf3";
-    $("iAtr").textContent = d.atr_pct!=null ? pct(d.atr_pct) : "—";
-    const er=d.trend_strength;
-    $("iEr").textContent = er!=null ? (er>0.4?"forte":er<0.2?"fraca/lateral":"média")+" ("+er.toFixed(2)+")" : "—";
-    $("iChg").textContent = d.change!=null ? (d.change>=0?"+":"")+pct(d.change) : "—";
-    $("iChg").style.color = d.change>=0?"#16c784":"#ea3943";
-  }catch(e){}
-}
-async function loadMTF(){
-  try{
-    const d = await (await fetch(`/api/mtf?symbol=${curSymbol()}`)).json();
-    const color={ALTA:"#16c784",BAIXA:"#ea3943",LATERAL:"#8b97a8","—":"#8b97a8"};
-    $("mtf").innerHTML = d.mtf.map(t=>
-      `<span class="pill" style="background:${color[t.trend]}22;color:${color[t.trend]}">${t.tf}: ${t.trend}</span>`).join("");
-  }catch(e){}
-}
-function initEqChart(){
-  if(eqChart) return;
-  eqChart = LightweightCharts.createChart($("eqchart"),{
-    layout:{background:{color:"#141925"},textColor:"#8b97a8"},
-    grid:{vertLines:{color:"#1b2233"},horzLines:{color:"#1b2233"}},
-    timeScale:{timeVisible:false,borderColor:"#243049"}, rightPriceScale:{borderColor:"#243049"}
-  });
-  eqSeries = eqChart.addAreaSeries({lineColor:"#16c784",topColor:"rgba(22,199,132,.3)",bottomColor:"rgba(22,199,132,0)"});
-  new ResizeObserver(()=>eqChart.applyOptions({width:$("eqchart").clientWidth,height:160})).observe($("eqchart"));
-}
-async function loadBacktest(){
-  setStatus(`<span class="spinner"></span> Calculando desempenho histórico…`);
-  try{
-    const d = await (await fetch(`/api/backtest?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json();
-    if(d.error){ setStatus("❌ "+d.error); return; }
-    const m=d.metrics;
-    $("pRet").textContent=(m.total_return>=0?"+":"")+pct(m.total_return);
-    $("pRet").style.color=m.total_return>=0?"#16c784":"#ea3943";
-    $("pWin").textContent=pct(m.win_rate);
-    $("pPf").textContent=m.profit_factor==null?"∞":m.profit_factor;
-    $("pDd").textContent=pct(m.max_drawdown);
-    $("pN").textContent=m.n_trades;
-    $("pExp").textContent=money(m.expectancy);
+/* ---------------- analise ---------------- */
+async function loadIndicators(){ try{
+  const d=await (await fetch(`/api/indicators?symbol=${curSymbol()}&tf=${TF}`)).json(); if(d.error)return;
+  const rsi=d.rsi; $("iRsi").textContent=rsi!=null?rsi.toFixed(0)+(rsi>70?" (sobrec.)":rsi<30?" (sobrev.)":""):"—";
+  $("iRsi").style.color=rsi>70?"#ea3943":rsi<30?"#16c784":"#e6edf3";
+  $("iAtr").textContent=d.atr_pct!=null?pct(d.atr_pct):"—";
+  const er=d.trend_strength; $("iEr").textContent=er!=null?(er>0.4?"forte":er<0.2?"lateral":"média")+" ("+er.toFixed(2)+")":"—";
+  $("iChg").textContent=d.change!=null?(d.change>=0?"+":"")+pct(d.change):"—"; $("iChg").style.color=d.change>=0?"#16c784":"#ea3943";
+}catch(e){} }
+async function loadMTF(){ try{
+  const d=await (await fetch(`/api/mtf?symbol=${curSymbol()}`)).json(); const c={ALTA:"#16c784",BAIXA:"#ea3943",LATERAL:"#8b97a8","—":"#8b97a8"};
+  $("mtf").innerHTML=d.mtf.map(t=>`<span class="pill" style="background:${c[t.trend]}22;color:${c[t.trend]}">${t.tf}: ${t.trend}</span>`).join("");
+}catch(e){} }
+function initEqChart(){ if(eqChart)return;
+  eqChart=LightweightCharts.createChart($("eqchart"),{layout:{background:{color:"#161b27"},textColor:"#8b97a8"},
+    grid:{vertLines:{color:"#1d2434"},horzLines:{color:"#1d2434"}},timeScale:{timeVisible:false,borderColor:"#2a3550"},rightPriceScale:{borderColor:"#2a3550"}});
+  eqSeries=eqChart.addAreaSeries({lineColor:"#16c784",topColor:"rgba(22,199,132,.3)",bottomColor:"rgba(22,199,132,0)"});
+  new ResizeObserver(()=>eqChart.applyOptions({width:$("eqchart").clientWidth,height:150})).observe($("eqchart")); }
+async function loadBacktest(){ setStatus(`<span class="spinner"></span> Calculando desempenho…`);
+  try{ const d=await (await fetch(`/api/backtest?symbol=${curSymbol()}&tf=${TF}&capital=${$("capital").value}`)).json();
+    if(d.error){ setStatus("❌ "+d.error); return; } const m=d.metrics;
+    $("pRet").textContent=(m.total_return>=0?"+":"")+pct(m.total_return); $("pRet").style.color=m.total_return>=0?"#16c784":"#ea3943";
+    $("pWin").textContent=pct(m.win_rate); $("pPf").textContent=m.profit_factor==null?"∞":m.profit_factor;
+    $("pDd").textContent=pct(m.max_drawdown); $("pN").textContent=m.n_trades; $("pExp").textContent=money(m.expectancy);
     initEqChart(); eqSeries.setData(d.curve); eqChart.timeScale().fitContent();
-    setStatus(`✅ Desempenho: ${m.n_trades} trades, retorno ${(m.total_return>=0?"+":"")+pct(m.total_return)} (backtest).`);
-  }catch(e){ setStatus("❌ "+e); }
-}
+    setStatus(`✅ Desempenho: ${m.n_trades} trades, retorno ${(m.total_return>=0?"+":"")+pct(m.total_return)}.`);
+  }catch(e){ setStatus("❌ "+e); } }
 
-async function carregarCarteira(){
-  $("panelCarteira").classList.remove("hide");
-  $("carteiraBody").innerHTML=`<tr><td colspan="3"><span class="spinner"></span> Analisando 7 ações… (alguns minutos)</td></tr>`;
-  setStatus("Analisando a carteira inteira… pode levar alguns minutos.");
-  try{
-    const d=await (await fetch(`/api/carteira?capital=${$("capital").value}`)).json();
-    $("carteiraBody").innerHTML=d.carteira.map(a=>
-      `<tr><td>${a.symbol}</td><td><span class="pill ${a.decision}">${a.decision}</span></td><td>${a.active}</td></tr>`).join("");
-    setStatus("✅ Carteira atualizada.");
-  }catch(e){ setStatus("❌ "+e); }
-}
-
-async function carregarExtrato(){
-  $("panelExtrato").classList.remove("hide");
-  setStatus(`<span class="spinner"></span> Avaliando os sinais registrados…`);
-  try{
-    const d = await (await fetch(`/api/extrato`)).json();
-    $("exAcertos").textContent=d.acertos;
-    $("exErros").textContent=d.erros;
-    $("exTaxa").textContent=d.taxa==null?"—":pct(d.taxa);
-    $("exAbertos").textContent=d.abertos;
-    const pos=d.total_pnl>=0;
-    $("exPnl").textContent=(pos?"+":"")+money(d.total_pnl);
-    $("exPnl").style.color=pos?"#16c784":"#ea3943";
-    const badge={alvo:'<span class="pill COMPRAR">✓ alvo</span>',
-                 stop:'<span class="pill VENDER">✗ stop</span>',
-                 aberto:'<span class="pill AGUARDAR">⏳ aberto</span>'};
-    const acao={long:"▲ COMPRA",short:"▼ VENDA"};
-    const cor=v=>v>0?"#16c784":v<0?"#ea3943":"#8b97a8";
-    $("extratoBody").innerHTML = d.signals.length ? d.signals.map(s=>
-      `<tr><td>${s.datetime}</td><td>${s.symbol} ${s.tf}</td><td>${acao[s.action]||s.action}</td>
-       <td>${money(s.entry)}</td><td>${badge[s.result]||s.result}</td>
-       <td style="color:${cor(s.pnl)}">${s.pnl?(s.pnl>0?"+":"")+money(s.pnl):"—"}</td></tr>`).join("")
-      : `<tr><td colspan="6" style="color:#8b97a8">Sem sinais ainda. Ligue o “Vigiar” — cada sinal que aparecer entra aqui automaticamente.</td></tr>`;
-    setStatus(`✅ Extrato: ${d.acertos} acertos, ${d.erros} erros`+(d.taxa!=null?` (${pct(d.taxa)} de acerto)`:'')+`, resultado ${(d.total_pnl>=0?"+":"")+money(d.total_pnl)}.`);
-  }catch(e){ setStatus("❌ "+e); }
-}
-
-async function carregarRadar(){
-  $("panelRadar").classList.remove("hide");
+/* ---------------- radar / carteira / extrato ---------------- */
+async function carregarRadar(){ toggleWin("win-radar",true);
   $("radarBody").innerHTML=`<tr><td colspan="6"><span class="spinner"></span> Varrendo o mercado…</td></tr>`;
-  setStatus(`<span class="spinner"></span> Radar varrendo ${TF}…`);
-  try{
-    const d=await (await fetch(`/api/radar?tf=${TF}`)).json();
-    const tcor={ALTA:"#16c784",BAIXA:"#ea3943",LATERAL:"#8b97a8"};
-    const scor={COMPRA:'<span class="pill COMPRAR">▲ COMPRA</span>',VENDA:'<span class="pill VENDER">▼ VENDA</span>',"—":'<span style="color:#8b97a8">—</span>'};
-    $("radarBody").innerHTML=d.radar.map(r=>
-      `<tr style="cursor:pointer" data-sym="${r.symbol}.SA">
-         <td><b>${r.symbol}</b></td>
-         <td>${money(r.price)}</td>
-         <td style="color:${r.change>=0?'#16c784':'#ea3943'}">${(r.change>=0?'+':'')+pct(r.change)}</td>
-         <td style="color:${tcor[r.trend]}">${r.trend}</td>
-         <td>${r.rsi!=null?r.rsi.toFixed(0):'—'}</td>
-         <td>${scor[r.setup]||r.setup}</td></tr>`).join("");
-    document.querySelectorAll("#radarBody tr").forEach(tr=>tr.onclick=()=>{
-      $("symbolCustom").value=tr.dataset.sym; analisar(); window.scrollTo({top:0,behavior:'smooth'});
-    });
-    const setups=d.radar.filter(r=>r.setup!=="—").length;
-    setStatus(`✅ Radar (${TF}): ${setups} ativo(s) com setup fresco. Clique para analisar.`);
-  }catch(e){ setStatus("❌ "+e); }
-}
+  try{ const d=await (await fetch(`/api/radar?tf=${TF}`)).json(); const tc={ALTA:"#16c784",BAIXA:"#ea3943",LATERAL:"#8b97a8"};
+    const sc={COMPRA:'<span class="pill COMPRAR">▲ COMPRA</span>',VENDA:'<span class="pill VENDER">▼ VENDA</span>',"—":'<span style="color:#8b97a8">—</span>'};
+    $("radarBody").innerHTML=d.radar.map(r=>`<tr data-sym="${r.symbol}.SA"><td><b>${r.symbol}</b></td><td>${money(r.price)}</td>
+      <td style="color:${r.change>=0?'#16c784':'#ea3943'}">${(r.change>=0?'+':'')+pct(r.change)}</td>
+      <td style="color:${tc[r.trend]}">${r.trend}</td><td>${r.rsi!=null?r.rsi.toFixed(0):'—'}</td><td>${sc[r.setup]||r.setup}</td></tr>`).join("");
+    document.querySelectorAll("#radarBody tr[data-sym]").forEach(tr=>tr.onclick=()=>{ $("symbolCustom").value=tr.dataset.sym; analisar(); });
+    setStatus(`✅ Radar (${TF}): ${d.radar.filter(r=>r.setup!=="—").length} ativo(s) com setup.`);
+  }catch(e){ setStatus("❌ "+e); } }
+async function carregarCarteira(){ toggleWin("win-carteira",true);
+  $("carteiraBody").innerHTML=`<tr><td colspan="3"><span class="spinner"></span> Analisando 7 ações…</td></tr>`;
+  try{ const d=await (await fetch(`/api/carteira?capital=${$("capital").value}`)).json();
+    $("carteiraBody").innerHTML=d.carteira.map(a=>`<tr><td>${a.symbol}</td><td><span class="pill ${a.decision}">${a.decision}</span></td><td>${a.active}</td></tr>`).join("");
+    setStatus("✅ Carteira atualizada.");
+  }catch(e){ setStatus("❌ "+e); } }
+async function carregarExtrato(){ toggleWin("win-extrato",true); setStatus(`<span class="spinner"></span> Avaliando sinais…`);
+  try{ const d=await (await fetch(`/api/extrato`)).json();
+    $("exAcertos").textContent=d.acertos; $("exErros").textContent=d.erros; $("exTaxa").textContent=d.taxa==null?"—":pct(d.taxa); $("exAbertos").textContent=d.abertos;
+    const pos=d.total_pnl>=0; $("exPnl").textContent=(pos?"+":"")+money(d.total_pnl); $("exPnl").style.color=pos?"#16c784":"#ea3943";
+    const bd={alvo:'<span class="pill COMPRAR">✓ alvo</span>',stop:'<span class="pill VENDER">✗ stop</span>',aberto:'<span class="pill AGUARDAR">⏳</span>'};
+    const ac={long:"▲",short:"▼"}, cor=v=>v>0?"#16c784":v<0?"#ea3943":"#8b97a8";
+    $("extratoBody").innerHTML=d.signals.length?d.signals.map(s=>`<tr><td>${s.datetime}</td><td>${s.symbol} ${s.tf}</td><td>${ac[s.action]||s.action}</td>
+      <td>${money(s.entry)}</td><td>${bd[s.result]||s.result}</td><td style="color:${cor(s.pnl)}">${s.pnl?(s.pnl>0?"+":"")+money(s.pnl):"—"}</td></tr>`).join("")
+      :`<tr><td colspan="6" style="color:#8b97a8">Sem sinais. Ligue o Vigiar — entram aqui sozinhos.</td></tr>`;
+    setStatus(`✅ Extrato: ${d.acertos} acertos, ${d.erros} erros, resultado ${(d.total_pnl>=0?"+":"")+money(d.total_pnl)}.`);
+  }catch(e){ setStatus("❌ "+e); } }
 
-async function acompanhar(){
-  if(!lastSignal) return;
-  const s=lastSignal;
+/* ---------------- operacoes ---------------- */
+async function acompanhar(){ if(!lastSignal)return; const s=lastSignal; toggleWin("win-trades",true);
   await fetch(`/api/trade/open?symbol=${s.symbol}&tf=${s.tf}&action=${s.action}&entry=${s.entry}&stop=${s.stop}&take=${s.take}&qty=${s.qty}`);
-  setStatus(`✅ Operação adicionada ao acompanhamento (${s.symbol}).`);
-  loadTrades();
-}
-async function loadTrades(silent){
-  try{
-    const d=await (await fetch(`/api/trade/list`)).json();
-    if(d.trades.length===0){ $("panelTrades").classList.add("hide"); return; }
-    $("panelTrades").classList.remove("hide");
-    const pos=d.total_pnl>=0;
-    $("tradesTotal").textContent=(pos?"+":"")+money(d.total_pnl);
-    $("tradesTotal").style.color=pos?"#16c784":"#ea3943";
-    const stcolor={alvo:"#16c784",stop:"#ea3943",aberta:"#8b97a8"};
-    const stlabel={alvo:"🎯 ALVO",stop:"🛑 STOP",aberta:"aberta"};
-    $("tradesBody").innerHTML=d.trades.map(t=>{
-      const lado=t.action==="long"?"▲ COMPRA":"▼ VENDA";
-      const move = t.move_stop ? `<div style="color:#f5a623;font-size:12px;margin-top:4px">↑ Proteja o lucro: suba o stop p/ ${money(t.suggested_stop)}</div>` : "";
-      return `<div class="kv" style="margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between">
-          <b>${t.symbol} ${lado}</b>
-          <span style="color:${t.pnl>=0?'#16c784':'#ea3943'};font-weight:700">${(t.pnl>=0?'+':'')+money(t.pnl)} (${t.profit_r>=0?'+':''}${t.profit_r}R)</span>
-        </div>
-        <div style="font-size:12px;color:#8b97a8;margin-top:3px">
-          entrada ${money(t.entry)} • atual ${money(t.price)} • stop ${money(t.stop)} • alvo ${money(t.take)}
-          • <span style="color:${stcolor[t.status]}">${stlabel[t.status]}</span></div>
-        ${move}
-        <button onclick="fecharTrade('${t.id}')" style="margin-top:6px;padding:4px 10px;font-size:12px">Fechar</button>
-      </div>`;
-    }).join("");
-    if(!silent){ d.trades.forEach(t=>checaAlerta(t)); }
-  }catch(e){}
-}
+  setStatus(`✅ Operação adicionada (${s.symbol}).`); loadTrades(); }
+async function loadTrades(silent){ try{
+  const d=await (await fetch(`/api/trade/list`)).json();
+  if(d.trades.length===0){ $("tradesBody").innerHTML='<span style="color:#8b97a8">Nenhuma operação aberta.</span>'; $("tradesTotal").textContent=""; return; }
+  const pos=d.total_pnl>=0; $("tradesTotal").textContent=(pos?"+":"")+money(d.total_pnl); $("tradesTotal").style.color=pos?"#16c784":"#ea3943";
+  const sc={alvo:"#16c784",stop:"#ea3943",aberta:"#8b97a8"}, sl={alvo:"🎯 ALVO",stop:"🛑 STOP",aberta:"aberta"};
+  $("tradesBody").innerHTML=d.trades.map(t=>{ const lado=t.action==="long"?"▲ COMPRA":"▼ VENDA";
+    const mv=t.move_stop?`<div style="color:#f5a623;font-size:11px;margin-top:4px">↑ Proteja o lucro: suba o stop p/ ${money(t.suggested_stop)}</div>`:"";
+    return `<div class="kv" style="margin-bottom:8px"><div style="display:flex;justify-content:space-between"><b>${t.symbol} ${lado}</b>
+      <span style="color:${t.pnl>=0?'#16c784':'#ea3943'};font-weight:700">${(t.pnl>=0?'+':'')+money(t.pnl)} (${t.profit_r>=0?'+':''}${t.profit_r}R)</span></div>
+      <div style="font-size:11px;color:#8b97a8;margin-top:3px">entr ${money(t.entry)} • atual ${money(t.price)} • stop ${money(t.stop)} • alvo ${money(t.take)} • <span style="color:${sc[t.status]}">${sl[t.status]}</span></div>
+      ${mv}<button onclick="fecharTrade('${t.id}')" style="margin-top:6px;padding:3px 9px;font-size:11px">Fechar</button></div>`; }).join("");
+  if(!silent) d.trades.forEach(checaAlerta);
+}catch(e){} }
 async function fecharTrade(id){ await fetch(`/api/trade/close?id=${id}`); loadTrades(); }
-function checaAlerta(t){
-  const prev=notifiedTrades[t.id];
-  if(t.status!=="aberta" && prev!==t.status){
-    notifiedTrades[t.id]=t.status;
-    const msg = t.status==="alvo" ? `🎯 ALVO atingido em ${t.symbol}! Lucro ${money(t.pnl)}` : `🛑 STOP atingido em ${t.symbol}. ${money(t.pnl)}`;
-    notify("Operação "+t.symbol, msg);
-    try{new Audio("data:audio/wav;base64,UklGRl9vT19XQVZF").play()}catch(e){}
-  } else if(t.move_stop && prev!=="trail"){
-    notifiedTrades[t.id]="trail";
-    notify("Proteja o lucro — "+t.symbol, `Suba o stop para ${money(t.suggested_stop)}`);
-  }
-}
+function checaAlerta(t){ const prev=notifiedTrades[t.id];
+  if(t.status!=="aberta"&&prev!==t.status){ notifiedTrades[t.id]=t.status; beep();
+    notify("Operação "+t.symbol, t.status==="alvo"?`🎯 ALVO! Lucro ${money(t.pnl)}`:`🛑 STOP. ${money(t.pnl)}`); }
+  else if(t.move_stop&&prev!=="trail"){ notifiedTrades[t.id]="trail"; notify("Proteja o lucro — "+t.symbol,`Suba o stop para ${money(t.suggested_stop)}`); } }
 
-function notify(title, body){
-  try{
-    if(window.Notification && Notification.permission==="granted") new Notification(title,{body});
-  }catch(e){}
-}
-
-// eventos
+/* ---------------- eventos ---------------- */
 $("tfs").addEventListener("click",e=>{ if(!e.target.dataset.tf)return;
-  document.querySelectorAll(".tf").forEach(b=>b.classList.remove("active"));
-  e.target.classList.add("active"); TF=e.target.dataset.tf; loadCandles(); });
-$("btnAnalisar").onclick=analisar;
-$("btnVigiar").onclick=toggleWatch;
-$("btnCarteira").onclick=carregarCarteira;
-$("btnRadar").onclick=carregarRadar;
-$("btnExtrato").onclick=carregarExtrato;
-$("btnPerf").onclick=loadBacktest;
-$("btnTrack").onclick=acompanhar;
+  document.querySelectorAll(".tf").forEach(b=>b.classList.remove("active")); e.target.classList.add("active");
+  TF=e.target.dataset.tf; loadCandles(); loadIndicators(); loadMTF(); });
+$("btnAnalisar").onclick=analisar; $("btnVigiar").onclick=toggleWatch;
+$("btnPerf").onclick=loadBacktest; $("btnTrack").onclick=acompanhar;
 $("symbol").onchange=()=>{ $("symbolCustom").value=""; loadCandles(); loadIndicators(); loadMTF(); };
+$("btnReset").onclick=()=>{ try{localStorage.removeItem("ra_wins")}catch(e){}; location.reload(); };
+document.querySelectorAll(".wbtn").forEach(b=>b.onclick=()=>{ const open=toggleWin(b.dataset.win);
+  if(open){ if(b.dataset.win==="win-radar")carregarRadar(); if(b.dataset.win==="win-carteira")carregarCarteira();
+    if(b.dataset.win==="win-extrato")carregarExtrato(); if(b.dataset.win==="win-perf")loadBacktest(); } });
+document.querySelectorAll("[data-close]").forEach(x=>x.onclick=()=>toggleWin(x.dataset.close,false));
+document.querySelectorAll(".window").forEach(makeDraggable);
 
-initChart();
-loadCandles();
-loadIndicators();
-loadMTF();
-loadTrades(true);
+document.documentElement.style.setProperty("--htop", HEAD_H()+"px");
+window.addEventListener("resize",()=>document.documentElement.style.setProperty("--htop",HEAD_H()+"px"));
+initChart(); restorePos(); loadCandles(); loadIndicators(); loadMTF(); loadTrades(true);
 </script>
 </body>
 </html>
