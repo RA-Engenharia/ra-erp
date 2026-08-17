@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
-    <title>RA ENGENHARIA • ERP V72.40 STORAGE HÍBRIDO</title>
+    <title>Sistema RA GESTAO DE OBRAS</title>
     <meta name="description" content="Sistema de Gestão Empresarial de Nova Geração - RA Engenharia">
     <meta name="theme-color" content="#030508">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
@@ -20306,6 +20306,7 @@
                 <i id="defaultLogo" class="fas fa-hard-hat text-4xl text-raBlue"></i>
             </div>
             <h1 class="font-black text-xl text-white tracking-tight font-display">RA ENGENHARIA</h1>
+            <div class="text-[11px] text-slate-300/90 font-semibold tracking-wide mt-0.5">Sistema RA GESTAO DE OBRAS</div>
             <div class="text-[10px] text-raGold mt-1 uppercase tracking-widest" id="sidebarCnpj">CNPJ: ...</div>
             <!-- Busca Global -->
             <div class="mt-4 w-full relative">
@@ -31174,7 +31175,27 @@ Ex: Prestação de Serviço Engenharia - OBRA: [NOME DA OBRA] RQ X.X.X/A - R0X D
                     <div class="space-y-6">
                         <div><label class="text-sm font-bold text-slate-500 uppercase">Nome da Empresa</label><input id="confName" class="input-modern w-full mt-2"></div>
                         <div class="grid grid-cols-2 gap-4"><div><label class="text-sm font-bold text-slate-500 uppercase">CNPJ</label><input id="confCnpj" class="input-modern w-full mt-2"></div><div><label class="text-sm font-bold text-slate-500 uppercase">Endereço</label><input id="confAddr" class="input-modern w-full mt-2"></div></div>
-                        <div><label class="text-sm font-bold text-slate-500 uppercase">Logo (URL ou Base64)</label><input id="confLogo" class="input-modern w-full mt-2" onchange="previewLogoConfig()"></div>
+                        <!-- LOGOTIPO DA EMPRESA (upload fácil - reconhece PNG e JPG) -->
+                        <div>
+                            <label class="text-sm font-bold text-slate-500 uppercase">Logotipo da Empresa</label>
+                            <div class="mt-2 flex items-center gap-4 flex-wrap">
+                                <div class="w-24 h-24 rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 bg-white flex items-center justify-center overflow-hidden shrink-0">
+                                    <img id="confLogoPreview" src="" class="w-full h-full object-contain p-1" style="display:none" onerror="this.style.display='none'">
+                                    <i id="confLogoPreviewIcon" class="fas fa-hard-hat text-3xl text-slate-300"></i>
+                                </div>
+                                <div class="flex flex-col gap-2">
+                                    <input type="file" id="confLogoFile" accept="image/png,image/jpeg,image/jpg,image/webp,image/*" class="hidden" onchange="handleLogoUpload(this)">
+                                    <button type="button" onclick="document.getElementById('confLogoFile').click()" class="px-4 py-2 rounded-xl font-bold bg-raBlue text-white hover:bg-raBlueLight transition-all"><i class="fas fa-upload mr-2"></i>Escolher logotipo</button>
+                                    <button type="button" onclick="removeLogoConfig()" class="px-4 py-2 rounded-xl font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-red-100 hover:text-red-600 transition-all"><i class="fas fa-trash mr-2"></i>Remover logo</button>
+                                    <span class="text-xs text-slate-400">Aceita PNG e JPG. Redimensionado automaticamente.</span>
+                                </div>
+                            </div>
+                            <!-- Opção avançada: colar URL ou Base64 -->
+                            <details class="mt-3">
+                                <summary class="text-xs text-slate-400 cursor-pointer hover:text-slate-600">Opções avançadas (colar URL ou Base64)</summary>
+                                <input id="confLogo" class="input-modern w-full mt-2" placeholder="https://... ou data:image/..." onchange="previewLogoConfig()">
+                            </details>
+                        </div>
                         
                         <!-- DADOS DO RESPONSÁVEL TÉCNICO -->
                         <div class="border-t pt-6">
@@ -47678,7 +47699,7 @@ ${contexto ? '\nContexto adicional: ' + contexto : ''}`;
         </body></html>`;
 
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     }
@@ -50517,7 +50538,7 @@ console.log('[V72.50] Carregando Orçamento PRO V3...');
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -50652,7 +50673,7 @@ console.log('[V72.50] Carregando Orçamento PRO V3...');
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -51167,7 +51188,7 @@ console.log('[V72.50] Carregando Orçamento PRO V3...');
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -55523,7 +55544,7 @@ _${db.config.companyName}_
         </body></html>`;
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     }
@@ -56310,6 +56331,7 @@ _${db.config.companyName}_
         </head><body>
         <div class="header">
             <div>
+                ${db.config.logo ? `<img src="${db.config.logo}" style="max-height:50px;margin-bottom:6px;display:block;">` : ''}
                 <div class="logo">${db.config?.companyName || 'RA ENGENHARIA'}</div>
                 <div>CNPJ: ${db.config?.cnpj || ''}</div>
                 <div>${db.config?.address || ''}</div>
@@ -57470,7 +57492,7 @@ _${db.config.companyName}_
         <!-- HEADER -->
         <div class="header">
             <div class="header-logo">
-                <div class="nfse-icon">NFS<sub>e</sub></div>
+                ${db.config.logo ? `<img src="${db.config.logo}" alt="Logo">` : `<div class="nfse-icon">NFS<sub>e</sub></div>`}
             </div>
             <div class="header-center">
                 <div class="titulo">DANFSe v1.0</div>
@@ -60316,7 +60338,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -60379,7 +60401,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -60764,7 +60786,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -60871,7 +60893,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -61434,7 +61456,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -61491,7 +61513,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -61769,7 +61791,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -61843,7 +61865,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -62136,7 +62158,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -66525,7 +66547,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         html += '</tbody></table></body></html>';
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     }
@@ -67445,7 +67467,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
         
         // Abrir em nova janela
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
         
@@ -67828,7 +67850,7 @@ Analise cuidadosamente e extraia todas as informações disponíveis.`;
 </html>`;
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     }
@@ -72949,7 +72971,7 @@ function renderEtapasPadrao() {
         
         // Abrir em nova janela para impressão
         const printWindow = window.open('', '_blank');
-        printWindow.document.write(conteudo);
+        printWindow.document.write(withLogo(conteudo));
         printWindow.document.close();
         printWindow.focus();
         
@@ -73812,13 +73834,34 @@ function renderEtapasPadrao() {
     }
     
     // Função genérica para imprimir documentos
+    // V72: injeta o logotipo no topo de um documento HTML completo, se ainda não estiver presente.
+    // Idempotente (não duplica) e seguro (se não houver logo configurado, devolve o HTML original).
+    function withLogo(html) {
+        try {
+            const logo = (typeof db !== 'undefined' && db.config && db.config.logo) ? db.config.logo : '';
+            if (!logo) return html;
+            html = String(html);
+            if (html.indexOf(logo) !== -1) return html; // documento já contém o logo
+            const tag = `<div style="text-align:center;margin-bottom:12px;"><img src="${logo}" style="max-height:60px;"></div>`;
+            const m = html.match(/<body[^>]*>/i);
+            if (m) return html.replace(m[0], m[0] + tag); // logo logo após a abertura do <body>
+            return tag + html;
+        } catch (e) { return html; }
+    }
+
     function printDocument(htmlContent, titulo) {
         const printWindow = window.open('', '_blank', 'width=900,height=700');
         if(!printWindow) {
             if(typeof toast==='function')toast('Popup bloqueado! Permita popups para imprimir.', 'error');
             return;
         }
-        
+
+        // V72: garante o logotipo no topo do documento se ele ainda não estiver presente no conteúdo
+        const _logo = (typeof db !== 'undefined' && db.config && db.config.logo) ? db.config.logo : '';
+        const _logoHeader = (_logo && String(htmlContent).indexOf(_logo) === -1)
+            ? `<div style="text-align:center;margin-bottom:12px;"><img src="${_logo}" style="max-height:60px;"></div>`
+            : '';
+
         printWindow.document.write(`
             <!DOCTYPE html>
             <html>
@@ -73850,6 +73893,7 @@ function renderEtapasPadrao() {
                         ✖️ Fechar
                     </button>
                 </div>
+                ${_logoHeader}
                 ${htmlContent}
             </body>
             </html>
@@ -75145,7 +75189,7 @@ function renderEtapasPadrao() {
         </body></html>`;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -77310,7 +77354,7 @@ ${db.config.email || ''}`);
 </html>`;
         
         const w = window.open('','','width=950,height=800');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         setTimeout(() => w.print(), 500);
     }
@@ -78834,7 +78878,7 @@ Atenciosamente,
         
         // Abrir janela para impressão
         const w = window.open('', '', 'width=950,height=800');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         setTimeout(() => w.print(), 800);
     }
@@ -79059,7 +79103,7 @@ Atenciosamente,
             </div>
             <p style="margin-top:30px;font-size:9px;color:#666;text-align:center;">Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p>
         </body></html>`;
-        const w = window.open('','','width=900,height=700'); w.document.write(html); w.document.close(); w.print();
+        const w = window.open('','','width=900,height=700'); w.document.write(withLogo(html)); w.document.close(); w.print();
     }
     
     function generateEmployeeReport() {
@@ -79081,7 +79125,7 @@ Atenciosamente,
             </table>
             <p style="margin-top:30px;font-size:9px;color:#666;text-align:center;">Total: ${emps.length} funcionários ativos | Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p>
         </body></html>`;
-        const w = window.open('','','width=900,height=700'); w.document.write(html); w.document.close(); w.print();
+        const w = window.open('','','width=900,height=700'); w.document.write(withLogo(html)); w.document.close(); w.print();
     }
     
     function generateObrasReport() {
@@ -79117,7 +79161,7 @@ Atenciosamente,
             }).join('')}
             <p style="margin-top:30px;font-size:9px;color:#666;text-align:center;">Total: ${obras.length} obras | Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p>
         </body></html>`;
-        const w = window.open('','','width=900,height=700'); w.document.write(html); w.document.close(); w.print();
+        const w = window.open('','','width=900,height=700'); w.document.write(withLogo(html)); w.document.close(); w.print();
     }
     
     function generateEPIReport() {
@@ -79139,7 +79183,7 @@ Atenciosamente,
             </table>
             <p style="margin-top:30px;font-size:9px;color:#666;text-align:center;">Total: ${episMes.length} entregas | Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p>
         </body></html>`;
-        const w = window.open('','','width=900,height=700'); w.document.write(html); w.document.close(); w.print();
+        const w = window.open('','','width=900,height=700'); w.document.write(withLogo(html)); w.document.close(); w.print();
     }
     
     function generateFullReport() {
@@ -79182,7 +79226,7 @@ Atenciosamente,
             </div>
             <p style="font-size:9px;color:#666;text-align:center;">Relatório gerado automaticamente em ${new Date().toLocaleString('pt-BR')} | ${db.config.companyName}</p>
         </body></html>`;
-        const w = window.open('','','width=900,height=700'); w.document.write(html); w.document.close(); w.print();
+        const w = window.open('','','width=900,height=700'); w.document.write(withLogo(html)); w.document.close(); w.print();
     }
     
     // ========== RELATÓRIO DRE - DEMONSTRATIVO DE RESULTADO (V70.8) ==========
@@ -79751,7 +79795,7 @@ Atenciosamente,
 </body></html>`;
         
         const w = window.open('', '', 'width=1000,height=800');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -79761,12 +79805,25 @@ Atenciosamente,
 
     function updateLogo() {
         const logo = db.config.logo;
+        const appLogo = document.getElementById('appLogo');
+        const defaultLogo = document.getElementById('defaultLogo');
         if(logo) {
-            document.getElementById('appLogo').src = logo;
-            document.getElementById('appLogo').style.display = 'block';
-            document.getElementById('defaultLogo').style.display = 'none';
+            if(appLogo) { appLogo.src = logo; appLogo.style.display = 'block'; }
+            if(defaultLogo) defaultLogo.style.display = 'none';
+        } else {
+            // Sem logo: volta ao ícone padrão (usado ao "Remover logo")
+            if(appLogo) { appLogo.src = ''; appLogo.style.display = 'none'; }
+            if(defaultLogo) defaultLogo.style.display = 'block';
         }
-        document.getElementById('sidebarCnpj').textContent = `CNPJ: ${db.config.cnpj}`;
+        // Atualiza também o logo da tela de login ao vivo
+        const loginLogo = document.getElementById('loginLogo');
+        const loginLogoIcon = document.getElementById('loginLogoIcon');
+        if(loginLogo) {
+            if(logo) { loginLogo.src = logo; loginLogo.style.display = 'block'; if(loginLogoIcon) loginLogoIcon.style.display = 'none'; }
+            else { loginLogo.src = ''; loginLogo.style.display = 'none'; if(loginLogoIcon) loginLogoIcon.style.display = 'block'; }
+        }
+        const sidebarCnpj = document.getElementById('sidebarCnpj');
+        if(sidebarCnpj) sidebarCnpj.textContent = `CNPJ: ${db.config.cnpj || ''}`;
     }
 
     function populateEpiSelect() {
@@ -80192,7 +80249,7 @@ Atenciosamente,
             </body></html>`;
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     }
@@ -80697,7 +80754,7 @@ Atenciosamente,
             </body></html>`;
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     }
@@ -82344,7 +82401,7 @@ Atenciosamente,
         </body></html>`;
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     }
@@ -82877,7 +82934,7 @@ Atenciosamente,
         
         html += '</body></html>';
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -83362,7 +83419,7 @@ Atenciosamente,
         </body></html>`;
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     }
@@ -83384,7 +83441,7 @@ Atenciosamente,
             </table>
         </body></html>`;
         
-        const win = window.open('', '_blank'); win.document.write(html); win.document.close(); win.print();
+        const win = window.open('', '_blank'); win.document.write(withLogo(html)); win.document.close(); win.print();
     }
     
     function gerarRelatorioInsumosEstoque() { printRelatorioEstoque(); }
@@ -83412,7 +83469,7 @@ Atenciosamente,
             </table>
         </body></html>`;
         
-        const win = window.open('', '_blank'); win.document.write(html); win.document.close(); win.print();
+        const win = window.open('', '_blank'); win.document.write(withLogo(html)); win.document.close(); win.print();
     }
     
     function gerarRelatorioInsumosPrecos() {
@@ -83447,7 +83504,7 @@ Atenciosamente,
             </table>
         </body></html>`;
         
-        const win = window.open('', '_blank'); win.document.write(html); win.document.close(); win.print();
+        const win = window.open('', '_blank'); win.document.write(withLogo(html)); win.document.close(); win.print();
     }
     
     // ═══════════════════════════════════════════════════════════════════════
@@ -84960,7 +85017,7 @@ Atenciosamente,
         </html>`;
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     }
@@ -85481,7 +85538,7 @@ Atenciosamente,
         `;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -85639,7 +85696,7 @@ Atenciosamente,
                 <strong>Legenda:</strong> ✅ = Medido | ❌ = Não Medido
             </div>
         </body></html>`;
-        const w = window.open('','','width=900,height=700'); w.document.write(html); w.document.close(); w.print();
+        const w = window.open('','','width=900,height=700'); w.document.write(withLogo(html)); w.document.close(); w.print();
     }
 
     function exportRDOCSV() {
@@ -86037,7 +86094,7 @@ Atenciosamente,
             </div>
             <p style="margin-top:30px;font-size:9px;color:#666;text-align:center;">Relatório gerado em ${new Date().toLocaleString('pt-BR')} | ${db.config.companyName}</p>
         </body></html>`;
-        const w = window.open('','','width=900,height=700'); w.document.write(html); w.document.close(); w.print();
+        const w = window.open('','','width=900,height=700'); w.document.write(withLogo(html)); w.document.close(); w.print();
     }
     
     function printRDOReportByObra() {
@@ -86172,7 +86229,7 @@ Atenciosamente,
             </div>
             <p style="margin-top:30px;font-size:9px;color:#666;text-align:center;">Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p>
         </body></html>`;
-        const w = window.open('','','width=900,height=700'); w.document.write(html); w.document.close(); w.print();
+        const w = window.open('','','width=900,height=700'); w.document.write(withLogo(html)); w.document.close(); w.print();
     }
     
     function printRDOReportByEmp() {
@@ -86304,7 +86361,7 @@ Atenciosamente,
             </div>
             <p style="margin-top:30px;font-size:9px;color:#666;text-align:center;">Relatório gerado em ${new Date().toLocaleString('pt-BR')}</p>
         </body></html>`;
-        const w = window.open('','','width=900,height=700'); w.document.write(html); w.document.close(); w.print();
+        const w = window.open('','','width=900,height=700'); w.document.write(withLogo(html)); w.document.close(); w.print();
     }
 
     // ===== SISTEMA DE PREVISÃO DE PAGAMENTO E CONTAS A PAGAR =====
@@ -86496,7 +86553,7 @@ Atenciosamente,
             </p>
         </body></html>`;
         
-        const w = window.open('','','width=900,height=700'); w.document.write(html); w.document.close(); w.print();
+        const w = window.open('','','width=900,height=700'); w.document.write(withLogo(html)); w.document.close(); w.print();
     }
     
     // Gerar Contas a Pagar automaticamente por Colaborador
@@ -86633,7 +86690,8 @@ Atenciosamente,
         document.getElementById('confCnpj').value = db.config.cnpj;
         document.getElementById('confAddr').value = db.config.address;
         document.getElementById('confLogo').value = db.config.logo || '';
-        
+        if (typeof previewLogoConfig === 'function') previewLogoConfig();
+
         // Carregar dados do responsável técnico
         const el = id => document.getElementById(id);
         if(el('confResponsavel')) el('confResponsavel').value = db.config.responsavel || '';
@@ -86708,6 +86766,78 @@ Nossa missão é transformar sonhos em realidade, construindo com responsabilida
                 </span>
             </div>
         `).join('');
+    }
+
+    // ===== LOGOTIPO: upload fácil com compressão via canvas (evita estourar localStorage) =====
+    function compressImageToDataURL(file, maxSize, callback) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                let w = img.width, h = img.height;
+                if (w >= h && w > maxSize) { h = Math.round(h * maxSize / w); w = maxSize; }
+                else if (h > w && h > maxSize) { w = Math.round(w * maxSize / h); h = maxSize; }
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+                // PNG preserva transparência; se ficar grande demais, cai para JPEG com fundo branco
+                let dataURL = canvas.toDataURL('image/png');
+                if (dataURL.length > 500000) {
+                    const c2 = document.createElement('canvas');
+                    c2.width = w; c2.height = h;
+                    const x2 = c2.getContext('2d');
+                    x2.fillStyle = '#ffffff'; x2.fillRect(0, 0, w, h);
+                    x2.drawImage(img, 0, 0, w, h);
+                    dataURL = c2.toDataURL('image/jpeg', 0.85);
+                }
+                callback(dataURL);
+            };
+            img.onerror = function() { callback(null); };
+            img.src = e.target.result;
+        };
+        reader.onerror = function() { callback(null); };
+        reader.readAsDataURL(file);
+    }
+
+    function handleLogoUpload(input) {
+        const file = input && input.files && input.files[0];
+        if (!file) return;
+        if (!/^image\//.test(file.type)) {
+            if (typeof toast === 'function') toast('Selecione um arquivo de imagem (PNG ou JPG)', 'error');
+            input.value = '';
+            return;
+        }
+        compressImageToDataURL(file, 400, function(dataURL) {
+            if (!dataURL) {
+                if (typeof toast === 'function') toast('Não foi possível ler a imagem. Tente outro arquivo.', 'error');
+                return;
+            }
+            const confLogo = document.getElementById('confLogo');
+            if (confLogo) confLogo.value = dataURL;
+            previewLogoConfig();
+            if (typeof toast === 'function') toast('Logotipo carregado! Clique em "Salvar" para aplicar.', 'success');
+        });
+        input.value = ''; // permite re-selecionar o mesmo arquivo
+    }
+
+    function previewLogoConfig() {
+        const confLogo = document.getElementById('confLogo');
+        const val = confLogo ? (confLogo.value || '') : '';
+        const img = document.getElementById('confLogoPreview');
+        const icon = document.getElementById('confLogoPreviewIcon');
+        if (img) {
+            if (val) { img.src = val; img.style.display = 'block'; if (icon) icon.style.display = 'none'; }
+            else { img.src = ''; img.style.display = 'none'; if (icon) icon.style.display = 'block'; }
+        }
+    }
+
+    function removeLogoConfig() {
+        const confLogo = document.getElementById('confLogo');
+        if (confLogo) confLogo.value = '';
+        previewLogoConfig();
+        if (typeof toast === 'function') toast('Logo removido. Clique em "Salvar" para confirmar.', 'info');
     }
 
     function saveConfig() {
@@ -87243,7 +87373,7 @@ Nossa missão é transformar sonhos em realidade, construindo com responsabilida
         
         html += '</body></html>';
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -87329,7 +87459,7 @@ Nossa missão é transformar sonhos em realidade, construindo com responsabilida
         
         html += '</body></html>';
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -87420,7 +87550,7 @@ Nossa missão é transformar sonhos em realidade, construindo com responsabilida
         </body></html>`;
         
         const w = window.open('','','width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         w.print();
     }
@@ -87947,7 +88077,7 @@ Nossa missão é transformar sonhos em realidade, construindo com responsabilida
         </html>`;
         
         const w = window.open('', '', 'width=900,height=700');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         setTimeout(() => w.print(), 500);
     }
@@ -89853,7 +89983,7 @@ Acreditamos que cada projeto é único e merece atenção personalizada. Por iss
 
         // Abrir em nova janela
         const w = window.open('', '_blank');
-        w.document.write(html);
+        w.document.write(withLogo(html));
         w.document.close();
         setTimeout(() => w.print(), 500);
     }
@@ -94992,7 +95122,7 @@ Seja realista com os preços atuais do mercado brasileiro (2024/2025).`;
         `;
         
         const printWindow = window.open('', '_blank');
-        printWindow.document.write(printContent);
+        printWindow.document.write(withLogo(printContent));
         printWindow.document.close();
         
         setTimeout(() => {
@@ -99693,7 +99823,7 @@ Seja realista com os preços atuais do mercado brasileiro (2024/2025).`;
         
         // Abrir em nova janela e imprimir
         const printWindow = window.open('', '_blank');
-        printWindow.document.write(htmlContent);
+        printWindow.document.write(withLogo(htmlContent));
         printWindow.document.close();
         
         setTimeout(() => {
@@ -107416,7 +107546,7 @@ function biExportPDF() {
     `;
     
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(printContent);
+    printWindow.document.write(withLogo(printContent));
     printWindow.document.close();
     printWindow.print();
     
@@ -107659,7 +107789,7 @@ function exportarDiarioPDFCompleto() {
     `;
     
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(printContent);
+    printWindow.document.write(withLogo(printContent));
     printWindow.document.close();
     setTimeout(() => printWindow.print(), 500);
     
@@ -107787,7 +107917,7 @@ function exportGanttPDFCompleto() {
     `;
     
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(printContent);
+    printWindow.document.write(withLogo(printContent));
     printWindow.document.close();
     setTimeout(() => printWindow.print(), 500);
     
@@ -110473,6 +110603,7 @@ console.log('[RA ERP] - Gestão Obra: PDF Diário e Gantt');
                 </style>
             </head>
             <body>
+                ${db.config.logo ? `<img src="${db.config.logo}" style="max-height:60px;margin-bottom:15px;">` : ''}
                 <h1>📊 ${title}</h1>
                 <p>Gerado em: ${new Date().toLocaleString('pt-BR')}</p>
                 ${content}
@@ -111325,7 +111456,7 @@ console.log('[RA ERP] - Gestão Obra: PDF Diário e Gantt');
         `;
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         
         if(typeof toast==='function')toast('Relatório Gerencial gerado!', 'success');
@@ -111656,7 +111787,7 @@ console.log('[RA ERP] - Gestão Obra: PDF Diário e Gantt');
         html += '</body></html>';
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     };
@@ -111684,7 +111815,7 @@ console.log('[RA ERP] - Gestão Obra: PDF Diário e Gantt');
         html += '</tbody></table></body></html>';
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     };
@@ -112374,7 +112505,7 @@ console.log('[RA ERP] - Gestão Obra: PDF Diário e Gantt');
         html += '</tbody></table></body></html>';
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         win.print();
     };
@@ -112703,7 +112834,7 @@ console.log('[RA ERP] - Gestão Obra: PDF Diário e Gantt');
         `;
         
         const win = window.open('', '_blank');
-        win.document.write(html);
+        win.document.write(withLogo(html));
         win.document.close();
         
         if(typeof toast==='function')toast('Relatório PDF gerado!', 'success');
