@@ -1,0 +1,14 @@
+{
+  "name": "ra-erp-backends",
+  "version": "1.0.0",
+  "description": "Serviços backend opcionais do RA ERP: SINAPI Fetcher (baixa tabelas oficiais da CAIXA) e PlugNotas Proxy (CORS para emissão de NFS-e)",
+  "private": true,
+  "scripts": {
+    "sinapi": "node sinapi-fetcher.js",
+    "plugnotas": "node plugnotas-proxy.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.17",
+    "xlsx": "^0.18.5"
+  }
+}
